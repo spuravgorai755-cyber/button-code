@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         souravgoriCRMhelper
+// @name         souravgoraiCRMhelper
 // @namespace    https://sourav1st.netlify.app/
 // @version      1.1
 // @description  this will help you to work more efficiently in ONE CRM.
@@ -14,11 +14,11 @@
 (() => {
   "use strict";
 
-  // ─── Duplicate guard ──────────────────────────────────────────────────────
+  // Duplicate guard
   if (window.__CRM_HELPER_v2__) return;
   window.__CRM_HELPER_v2__ = true;
 
-  // ─── Expiry guard ─────────────────────────────────────────────────────────
+  // Expiry guard
   // Script is licensed until Sourav want. After that date it will not run.
   const _EXPIRY = new Date('2026-09-05T23:59:59');
   if (new Date() > _EXPIRY) {
@@ -26,7 +26,7 @@
     return;
   }
 
-  // ─── Kill switch (remote control via GitHub Gist) ─────────────────────────
+  // Kill switch (remote control via sourav gorai)
   const _STATUS_URL = 'https://gist.githubusercontent.com/spuravgorai755-cyber/2dd4cfbdf58cdaabf31c213c8bfb9433/raw/status.json';
   GM_xmlhttpRequest({
     method: 'GET',
@@ -46,9 +46,8 @@
   function _initScript() {
   // ──────────────────────────────────────────────────────────────────────────
 
-  // ╔══════════════════════════════════════════════════════════════════════════╗
-  // ║                   CRM HELPER — Quick-Action Panel                       ║
-  // ╚══════════════════════════════════════════════════════════════════════════╝
+  //
+  //                 CRM HELPER — Quick-Action Panel
 
   // --- Constants ---
   const MAIN_LABEL   = "Select Disposition Code";
@@ -497,9 +496,7 @@
   function scheduleManage(){clearTimeout(btnCheckTimer);btnCheckTimer=setTimeout(()=>manageButtons(),450);}
 
 
-  // ╔══════════════════════════════════════════════════════════════════════════╗
-  // ║                    CRM QUICK INFO PANEL                                 ║
-  // ╚══════════════════════════════════════════════════════════════════════════╝
+  //                  CRM QUICK INFO PANEL                                  
 
   // --- QIP Constants ---
   const QID       = 'crm-qip';
