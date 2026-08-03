@@ -1,21 +1,54 @@
 // ==UserScript==
-// @name         CRM Helper
+// @name         souravgoriCRMhelper
 // @namespace    https://sourav1st.netlify.app/
-// @version      2.2.1
-// @description  Floating quick-action panel for the Bajaj Finserv ConVox CRM portal. Auto-fills disposition codes (PTP, Call Back, CLPD, Customer Disconnected, Death, Wrong Number), scrapes and fills PTP amounts, sends payment links, and more — with double-tap safety and drag-to-reposition support. Only activates when the disposition form is detected on screen.
+// @version      1.1
+// @description  this will help you to work more efficiently in ONE CRM.
 // @author       Sourav Gorai
 // @match        https://*/*
 // @run-at       document-idle
 // @license      Copyright (c) 2026 Sourav Gorai. All rights reserved.
-// @grant        none
+// @grant        GM_xmlhttpRequest
+// @connect      gist.githubusercontent.com
 // ==/UserScript==
 
 (() => {
   "use strict";
 
-  // --- Duplicate guard ---
+  // ─── Duplicate guard ──────────────────────────────────────────────────────
   if (window.__CRM_HELPER_v2__) return;
   window.__CRM_HELPER_v2__ = true;
+
+  // ─── Expiry guard ─────────────────────────────────────────────────────────
+  // Script is licensed until Sourav want. After that date it will not run.
+  const _EXPIRY = new Date('2026-09-05T23:59:59');
+  if (new Date() > _EXPIRY) {
+    console.warn('[souravgoriCRMhelper] Script has expired (not available).');
+    return;
+  }
+
+  // ─── Kill switch (remote control via GitHub Gist) ─────────────────────────
+  const _STATUS_URL = 'https://gist.githubusercontent.com/spuravgorai755-cyber/2dd4cfbdf58cdaabf31c213c8bfb9433/raw/status.json';
+  GM_xmlhttpRequest({
+    method: 'GET',
+    url: _STATUS_URL,
+    onload: function(res) {
+      try {
+        const data = JSON.parse(res.responseText);
+        if (!data.active) {
+          console.warn('[souravgoriCRMhelper] Script disabled by admin.');
+          return;
+        }
+      } catch (_) {}
+      _initScript();
+    },
+    onerror: function() { _initScript(); }
+  });
+  function _initScript() {
+  // ──────────────────────────────────────────────────────────────────────────
+
+  // ╔══════════════════════════════════════════════════════════════════════════╗
+  // ║                   CRM HELPER — Quick-Action Panel                       ║
+  // ╚══════════════════════════════════════════════════════════════════════════╝
 
   // --- Constants ---
   const MAIN_LABEL   = "Select Disposition Code";
@@ -25,7 +58,7 @@
   const OPT_SEL      = "[role='option'],.ant-select-item-option,.mat-option,.mat-mdc-option,.select2-results__option,.ng-option,.MuiAutocomplete-option,li[aria-selected],div[aria-selected]";
   const DATE_TOKEN   = "__DATE__";
   const TIME_TOKEN   = "__TIME__";
-  const DBL_MS       = 500;
+  const DBL_MS       = 400;
   const TRANS        = "background 200ms ease,box-shadow 200ms ease,padding 180ms ease,opacity 400ms ease,transform 220ms cubic-bezier(.4,0,.2,1)";
 
   // --- Disposition rules: sub-field mappings per main value ---
@@ -230,7 +263,6 @@
   async function runPLNK() { if(!await retrySelAct("Initiate Collect Request"))return false; await wait(400); if(!await retryBtn(["Send SMS","Send Sms"],"Send SMS"))return false; scheduleClose(); return true; }
   async function runSL() { if(!await retrySelAct("Store Locator"))return false; await wait(400); if(!await retryBtn(["Send SMS","Send Sms"],"Send SMS"))return false; scheduleClose(); return true; }
   async function runPTP() { if(!await retryField(MAIN_LABEL,"PTPCB"))return false; await applyRule(findRule("PTPCB")); await wait(500); let amt=findOverdueAmt(); if(!amt){toast.err("Missing: Total Overdue (C)");return false;} if(amt==="0"||amt==="0.00"){amt=findLastPaidAmt();if(!amt){toast.err("Missing: Last Paid Amount");return false;}} if(!await retryField("PTP Amount",amt))return false; await wait(300); await retryFocus("Enter Remarks"); return true; }
-  // NEW: Same as runPTP but auto-submits via End Call instead of opening the remarks keyboard
   async function runPTPAuto() { if(!await retryField(MAIN_LABEL,"PTPCB"))return false; await applyRule(findRule("PTPCB")); await wait(500); let amt=findOverdueAmt(); if(!amt){toast.err("Missing: Total Overdue (C)");return false;} if(amt==="0"||amt==="0.00"){amt=findLastPaidAmt();if(!amt){toast.err("Missing: Last Paid Amount");return false;}} if(!await retryField("PTP Amount",amt))return false; await wait(300); if(!await retryBtn(["End call","End Call"],"End call"))return false; scheduleClose(); return true; }
 
   // --- Button loading state ---
@@ -313,7 +345,7 @@
     Object.assign(wrap.style,bs);
   }
 
-  // --- CSS injection ---
+  // --- CSS injection (CRM Helper panel styles) ---
   function injectStyles() {
     if (document.getElementById("sg-btn-style")) return;
     const F="-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif";
@@ -350,7 +382,7 @@
   // --- Drag: pointer capture per-button, moves the whole wrapper ---
   function attachDrag(btn) {
     btn.addEventListener("pointerdown", e => {
-      wakeWrapper(); // un-dim immediately on any touch or drag
+      wakeWrapper();
       _dW=getWrapper(); if(!_dW)return;
       try{btn.setPointerCapture(e.pointerId);}catch(_){}
       isDragging=false; _dSX=e.clientX; _dSY=e.clientY;
@@ -423,14 +455,11 @@
   function syncBtns(wrap) {
     const data=getBtnData(),L=getLayout();
     const wantActions=[],wantPairs=[];
-    // Collect which actions belong to pairs (for stale-button cleanup)
     const pairActions=new Set();
     data.forEach(item=>{if(item.type==="pair"){wantPairs.push(item.pairId);item.buttons.forEach(b=>{wantActions.push(b.action||b.name);pairActions.add(b.action||b.name);});}else wantActions.push(item.action||item.name);});
-    // Remove stale direct-child buttons (also catches any that moved into a pair)
     wrap.querySelectorAll(":scope > button").forEach(b=>{const bAct=b.dataset.sgActionName||"";if(!wantActions.some(n=>cleanText(n)===cleanText(bAct))||pairActions.has(bAct))b.remove();});
     wrap.querySelectorAll(":scope > .sg-pair-row").forEach(d=>{if(!wantPairs.includes(d.dataset.sgPairId))d.remove();});
     Object.keys(activeBtns).forEach(k=>{if(!wantActions.includes(k))delete activeBtns[k];});
-    // Create or update
     data.forEach(item=>{
       if(item.type==="pair"){
         let row=wrap.querySelector(`.sg-pair-row[data-sg-pair-id="${item.pairId}"]`);
@@ -458,7 +487,7 @@
   // --- Manage wrapper: create, update, or remove ---
   function manageButtons() {
     if(isDragging)return;
-    const all=Array.from(document.querySelectorAll(`#${WRAP_ID}`)); all.slice(1).forEach(x=>x.remove()); // remove duplicates
+    const all=Array.from(document.querySelectorAll(`#${WRAP_ID}`)); all.slice(1).forEach(x=>x.remove());
     let wrap=all[0]||null;
     if(!isTargetPage()){if(wrap){wrap.remove();Object.keys(activeBtns).forEach(k=>delete activeBtns[k]);}return;}
     injectStyles();
@@ -467,21 +496,584 @@
   }
   function scheduleManage(){clearTimeout(btnCheckTimer);btnCheckTimer=setTimeout(()=>manageButtons(),450);}
 
-  // --- Events: hide panel when CRM field is focused (keyboard up) ---
-  document.addEventListener("focusin",e=>{const w=getWrapper();if(!w||w.contains(e.target))return;clearTimeout(focusDebounce);hideWrapper();},{capture:true,passive:true});
-  document.addEventListener("focusout",()=>{clearTimeout(focusDebounce);focusDebounce=setTimeout(()=>{if(fieldHidden)showWrapper();},150);},{capture:true,passive:true});
-  if(window.visualViewport){window.visualViewport.addEventListener("resize",()=>{const w=getWrapper();if(!w)return;const ratio=window.visualViewport.height/(window.screen.height||window.innerHeight);if(ratio<0.75){clearTimeout(focusDebounce);hideWrapper();}else if(fieldHidden){clearTimeout(focusDebounce);showWrapper();}},{passive:true});}
-  window.addEventListener("resize",scheduleManage,{passive:true});
 
-  // --- MutationObserver: react to page DOM changes, auto-disconnect after 60s ---
-  let everSawPage=false;
-  const obs=new MutationObserver(()=>{clearTimeout(mutTimer);mutTimer=setTimeout(()=>{scheduleManage();if(isTargetPage())everSawPage=true;},300);});
-  obs.observe(document.documentElement,{childList:true,subtree:true});
-  setTimeout(()=>{if(!everSawPage){obs.disconnect();clearTimeout(mutTimer);clearTimeout(btnCheckTimer);}},60000);
+  // ╔══════════════════════════════════════════════════════════════════════════╗
+  // ║                    CRM QUICK INFO PANEL                                 ║
+  // ╚══════════════════════════════════════════════════════════════════════════╝
 
-  // --- Init ---
-  if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",manageButtons);
-  else manageButtons();
-  setTimeout(()=>manageButtons(),1000);
+  // --- QIP Constants ---
+  const QID       = 'crm-qip';
+  const LS_PREFIX = 'crm-qip:';
+  const DASH      = '\u2013';
 
+  const QIP_CSS = `
+    #${QID} {
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', Arial, sans-serif;
+      background: #EFEFF4;
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow:
+        0 0 0 0.5px rgba(0,0,0,.10),
+        0 2px 8px rgba(0,0,0,.09),
+        0 12px 40px rgba(0,0,0,.16),
+        0 24px 64px rgba(0,0,0,.08);
+      margin: 12px;
+      color: #1D1D1F;
+      min-width: 360px;
+    }
+    #${QID} .qip-hdr {
+      background: linear-gradient(175deg, #E9E9EF 0%, #DCDCE2 55%, #D5D5DB 100%);
+      padding: 14px 18px 12px;
+      border-bottom: 0.5px solid rgba(0,0,0,.13);
+      display: flex;
+      align-items: center;
+      gap: 9px;
+    }
+    #${QID} .qip-hdr::before {
+      content: '';
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #0A84FF, #30D158);
+      flex-shrink: 0;
+      box-shadow: 0 0 0 2px rgba(10,132,255,.18);
+    }
+    #${QID} .qip-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: #58585F;
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+    }
+    #${QID} .qip-body {
+      padding: 13px 13px 0;
+      display: flex;
+      flex-direction: column;
+      gap: 11px;
+      background: #EFEFF4;
+    }
+    #${QID} .qip-card {
+      background: #FFFFFF;
+      border-radius: 14px;
+      overflow: hidden;
+      box-shadow:
+        0 0 0 0.5px rgba(0,0,0,.07),
+        0 1px 3px rgba(0,0,0,.05),
+        0 3px 12px rgba(0,0,0,.04);
+    }
+    #${QID} .qip-card-title {
+      font-size: 10.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: #8E8E93;
+      letter-spacing: .10em;
+      padding: 8px 18px 7px;
+      background: linear-gradient(180deg, #F8F8F8 0%, #F3F3F5 100%);
+      border-bottom: 0.5px solid rgba(0,0,0,.09);
+    }
+    #${QID} .qip-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 13px 18px;
+      gap: 14px;
+      border-bottom: 0.5px solid rgba(0,0,0,.055);
+    }
+    #${QID} .qip-row:last-child { border-bottom: none; }
+    #${QID} .qip-lbl {
+      font-size: 20px;
+      color: #6E6E73;
+      flex-shrink: 0;
+      font-weight: 400;
+      letter-spacing: -0.01em;
+    }
+    #${QID} .qip-val {
+      font-size: 21px;
+      font-weight: 500;
+      color: #1D1D1F;
+      text-align: right;
+      word-break: break-word;
+      letter-spacing: -0.01em;
+    }
+    #${QID} .qip-name {
+      color: #0A84FF;
+      font-size: 34px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.15;
+    }
+    #${QID} .qip-loan-wrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    #${QID} .qip-loan-input {
+      background: #F0F0F5;
+      border: 0.5px solid #C7C7CC;
+      border-radius: 9px;
+      padding: 8px 12px;
+      font-size: 20px;
+      font-weight: 600;
+      color: #5856D6;
+      width: 270px;
+      text-align: center;
+      outline: none;
+      cursor: default;
+      -webkit-user-select: text;
+      user-select: text;
+      letter-spacing: -0.01em;
+    }
+    #${QID} .qip-copy-btn {
+      background: linear-gradient(180deg, #1A8AFF 0%, #0A84FF 100%);
+      color: #FFFFFF;
+      border: none;
+      border-radius: 9px;
+      padding: 8px 16px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      white-space: nowrap;
+      transition: opacity 0.16s;
+      box-shadow: 0 1px 4px rgba(10,132,255,.38), 0 2px 8px rgba(10,132,255,.15);
+    }
+    #${QID} .qip-copy-btn:active { opacity: 0.72; }
+    #${QID} .qip-copy-btn.copied {
+      background: linear-gradient(180deg, #38D758 0%, #30D158 100%);
+      box-shadow: 0 1px 4px rgba(48,209,88,.38);
+    }
+    #${QID} #qip-emi     { color: #FF9F0A; font-size: 22px; font-weight: 700; }
+    #${QID} #qip-lpc     { color: #FF453A; font-size: 22px; font-weight: 700; }
+    #${QID} #qip-total   { color: #30D158; font-size: 22px; font-weight: 700; }
+    #${QID} #qip-waiver  { color: #30D158; font-size: 22px; font-weight: 700; }
+    #${QID} #qip-collect { color: #5E5CE6; font-size: 22px; font-weight: 700; }
+    #${QID} .qip-footer {
+      padding: 12px 13px 14px;
+      display: flex;
+      gap: 10px;
+      background: #EFEFF4;
+    }
+    #${QID} .qip-btn-toggle,
+    #${QID} .qip-btn-full {
+      flex: 1;
+      min-width: 0;
+      padding: 14px 10px;
+      border-radius: 12px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      white-space: nowrap;
+      transition: opacity 0.16s;
+    }
+    #${QID} .qip-btn-toggle {
+      background: #FFFFFF;
+      color: #1D1D1F;
+      border: 0.5px solid #C7C7CC;
+      box-shadow: 0 1px 3px rgba(0,0,0,.08), 0 0 0 0.5px rgba(0,0,0,.06);
+    }
+    #${QID} .qip-btn-toggle:active { opacity: 0.68; }
+    #${QID} .qip-btn-toggle.active {
+      background: linear-gradient(180deg, #38D758 0%, #30D158 100%);
+      color: #FFFFFF;
+      border-color: transparent;
+      box-shadow: 0 1px 4px rgba(48,209,88,.42), 0 2px 10px rgba(48,209,88,.18);
+    }
+    #${QID} .qip-btn-full {
+      background: linear-gradient(180deg, #1A8AFF 0%, #0A84FF 100%);
+      color: #FFFFFF;
+      border: none;
+      box-shadow: 0 1px 4px rgba(10,132,255,.42), 0 3px 10px rgba(10,132,255,.20);
+    }
+    #${QID} .qip-btn-full:active { opacity: 0.72; }
+    #qip-back-bar {
+      display: none;
+      margin: 12px;
+    }
+    #qip-back-bar button {
+      width: 100%;
+      background: linear-gradient(180deg, #1A8AFF 0%, #0A84FF 100%);
+      color: #FFFFFF;
+      border: none;
+      padding: 15px;
+      border-radius: 13px;
+      font-size: 18px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      box-shadow: 0 1px 4px rgba(10,132,255,.42), 0 3px 12px rgba(10,132,255,.20);
+    }
+    #qip-back-bar button:active { opacity: 0.72; }
+  `;
+
+  // --- QIP State ---
+  let originalEl     = null;
+  let qipPanel       = null;
+  let qipBackBar     = null;
+  let historyVisible = lsGet('history') === 'true';
+
+  // --- QIP Helpers ---
+  function lsGet(key) {
+    try { return localStorage.getItem(LS_PREFIX + key); } catch { return null; }
+  }
+  function lsSet(key, value) {
+    try { localStorage.setItem(LS_PREFIX + key, String(value)); } catch {}
+  }
+
+  function elByText(text, root) {
+    const walker = document.createTreeWalker(root ?? document.body, NodeFilter.SHOW_TEXT);
+    let node;
+    while ((node = walker.nextNode())) {
+      if (node.textContent.trim().includes(text)) return node.parentElement;
+    }
+    return null;
+  }
+
+  function elByExact(text, root) {
+    const walker = document.createTreeWalker(root ?? document.body, NodeFilter.SHOW_TEXT);
+    let node;
+    while ((node = walker.nextNode())) {
+      if (node.textContent.trim() === text) return node.parentElement;
+    }
+    return null;
+  }
+
+  function cardOf(headingEl) {
+    if (!headingEl) return null;
+    let el = headingEl.parentElement;
+    for (let i = 0; i < 10; i++) {
+      if (!el) return null;
+      if (el.offsetHeight > 80 && el.offsetWidth > 100) return el;
+      el = el.parentElement;
+    }
+    return null;
+  }
+
+  function readVal(labelEl) {
+    if (!labelEl) return DASH;
+    const sibling = labelEl.nextElementSibling;
+    if (sibling) { const text = sibling.textContent.trim(); if (text) return text; }
+    const row = labelEl.parentElement;
+    if (row?.children.length >= 2) {
+      const lastChild = row.children[row.children.length - 1];
+      if (lastChild !== labelEl) { const text = lastChild.textContent.trim(); if (text) return text; }
+    }
+    const grandparentRow = row?.parentElement;
+    if (grandparentRow?.children.length >= 2) {
+      const lastChild = grandparentRow.children[grandparentRow.children.length - 1];
+      if (lastChild !== row) { const text = lastChild.textContent.trim(); if (text) return text; }
+    }
+    return DASH;
+  }
+
+  function qipVal(card, labelText) {
+    if (!card) return DASH;
+    return readVal(elByExact(labelText, card) ?? elByText(labelText, card));
+  }
+
+  // --- QIP Core Logic ---
+  function extractData() {
+    if (!originalEl) {
+      return {
+        name: DASH, loanNo: DASH, product: DASH, asset: DASH, model: DASH,
+        emiA: DASH, lpcB: DASH, totalC: DASH, waiverAmt: DASH, collectAmt: DASH,
+        lastPaidAmt: DASH, lastPaidDate: DASH
+      };
+    }
+    const customerCard    = cardOf(elByText('Customer Details',     originalEl));
+    const productCard     = cardOf(elByText('Product Details',      originalEl));
+    const amountCard      = cardOf(elByText('Amount payables',      originalEl));
+    const loanCard        = cardOf(elByText('Loan Details',         originalEl));
+    const flagsCard       = cardOf(elByText('Flags',                originalEl));
+    const pastPaymentCard = cardOf(elByText('Past Payment Details', originalEl));
+    return {
+      name:         qipVal(customerCard,    'Name'),
+      loanNo:       qipVal(loanCard,        'Loan Number'),
+      product:      qipVal(productCard,     'Product description'),
+      asset:        qipVal(productCard,     'Asset Description'),
+      model:        qipVal(productCard,     'Make or Model'),
+      emiA:         qipVal(amountCard,      'EMI Overdue'),
+      lpcB:         qipVal(amountCard,      'Late Payment Charges'),
+      totalC:       qipVal(amountCard,      'Total Overdue'),
+      waiverAmt:    qipVal(flagsCard,       'Waiver Amount'),
+      collectAmt:   qipVal(flagsCard,       'Collect Amount'),
+      lastPaidAmt:  qipVal(pastPaymentCard, 'Last Paid Amount'),
+      lastPaidDate: qipVal(pastPaymentCard, 'Last payment Date'),
+    };
+  }
+
+  function hasData(data) {
+    return Object.values(data).some(v => v !== DASH);
+  }
+
+  function findOriginalEl() {
+    const customerEl = elByText('Customer Details');
+    if (!customerEl) return null;
+    let el = customerEl.parentElement;
+    for (let i = 0; i < 12; i++) {
+      if (!el) break;
+      const text = el.textContent;
+      if (
+        text.includes('Customer Details') &&
+        text.includes('Product Details')  &&
+        text.includes('Amount payables')  &&
+        text.includes('Loan Details')
+      ) return el;
+      el = el.parentElement;
+    }
+    return null;
+  }
+
+  function findHistoryEl() {
+    const el = elByText('FOLLOW UP HISTORY');
+    if (!el) return null;
+    let container = el.parentElement;
+    for (let i = 0; i < 8; i++) {
+      if (!container) break;
+      if (
+        container.textContent.includes('ESCALATION HISTORY') &&
+        container.textContent.includes('VIEW MORE HISTORY')
+      ) return container;
+      container = container.parentElement;
+    }
+    return null;
+  }
+
+  function hideOriginal() {
+    if (!originalEl) return;
+    Object.assign(originalEl.style, {
+      position: 'absolute', top: '-9999px', left: '-9999px',
+      visibility: 'hidden', display: 'block'
+    });
+  }
+
+  function showOriginal() {
+    if (!originalEl) return;
+    Object.assign(originalEl.style, {
+      position: '', top: '', left: '', visibility: '', display: ''
+    });
+  }
+
+  function applyToggles() {
+    const historyEl = findHistoryEl();
+    if (historyEl) historyEl.style.display = historyVisible ? '' : 'none';
+    const histBtn = document.getElementById('qip-toggle-history');
+    if (histBtn) {
+      histBtn.textContent = historyVisible ? 'Hide History' : 'Show History';
+      histBtn.classList.toggle('active', historyVisible);
+    }
+  }
+
+  // --- QIP UI Builder ---
+  function buildPanel(data) {
+    const div = document.createElement('div');
+    div.id = QID;
+    div.innerHTML = `
+      <div class="qip-hdr">
+        <span class="qip-title">D&amp;C BY Sourav Gorai</span>
+      </div>
+      <div class="qip-body">
+        <div class="qip-card">
+          <div class="qip-card-title">Customer &amp; Product Info</div>
+          <div id="qip-body-customer">
+            <div class="qip-row"><span class="qip-lbl">Name</span><span class="qip-val qip-name" id="qip-name">${data.name}</span></div>
+            <div class="qip-row">
+              <span class="qip-lbl">Loan No.</span>
+              <div class="qip-loan-wrap">
+                <input class="qip-loan-input" id="qip-loan" type="text" readonly value="${data.loanNo}">
+                <button class="qip-copy-btn" id="qip-copy-btn">Copy</button>
+              </div>
+            </div>
+            <div class="qip-row"><span class="qip-lbl">Product</span><span class="qip-val" id="qip-product">${data.product}</span></div>
+            <div class="qip-row"><span class="qip-lbl">Asset</span><span class="qip-val" id="qip-asset">${data.asset}</span></div>
+            <div class="qip-row"><span class="qip-lbl">Model</span><span class="qip-val" id="qip-model">${data.model}</span></div>
+            <div class="qip-row"><span class="qip-lbl">Last Paid Amount</span><span class="qip-val" id="qip-last-paid-amt">${data.lastPaidAmt}</span></div>
+            <div class="qip-row"><span class="qip-lbl">Last Payment Date</span><span class="qip-val" id="qip-last-paid-date">${data.lastPaidDate}</span></div>
+          </div>
+        </div>
+        <div class="qip-card">
+          <div class="qip-card-title">Total Recovery Amount Breakdown</div>
+          <div id="qip-body-recovery">
+            <div class="qip-row"><span class="qip-lbl">EMI Overdue (A)</span><span class="qip-val" id="qip-emi">${data.emiA}</span></div>
+            <div class="qip-row"><span class="qip-lbl">Late Charges (B)</span><span class="qip-val" id="qip-lpc">${data.lpcB}</span></div>
+            <div class="qip-row"><span class="qip-lbl">Total Overdue (C)</span><span class="qip-val" id="qip-total">${data.totalC}</span></div>
+            <div class="qip-row"><span class="qip-lbl">Waiver Amount</span><span class="qip-val" id="qip-waiver">${data.waiverAmt}</span></div>
+            <div class="qip-row"><span class="qip-lbl">Collect Amount</span><span class="qip-val" id="qip-collect">${data.collectAmt}</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="qip-footer">
+        <button class="qip-btn-toggle" id="qip-toggle-history">Show History</button>
+        <button class="qip-btn-full"   id="qip-btn-full">Full Details</button>
+      </div>
+    `;
+    return div;
+  }
+
+  function updatePanel(data) {
+    const setText = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
+    setText('qip-name',           data.name);
+    setText('qip-product',        data.product);
+    setText('qip-asset',          data.asset);
+    setText('qip-model',          data.model);
+    setText('qip-emi',            data.emiA);
+    setText('qip-lpc',            data.lpcB);
+    setText('qip-total',          data.totalC);
+    setText('qip-waiver',         data.waiverAmt);
+    setText('qip-collect',        data.collectAmt);
+    setText('qip-last-paid-amt',  data.lastPaidAmt);
+    setText('qip-last-paid-date', data.lastPaidDate);
+    const loanInput = document.getElementById('qip-loan');
+    if (loanInput) loanInput.value = data.loanNo;
+  }
+
+  // --- QIP Events ---
+  function wireCopyBtn() {
+    const copyBtn = document.getElementById('qip-copy-btn');
+    if (!copyBtn) return;
+    copyBtn.addEventListener('click', () => {
+      const loanInput = document.getElementById('qip-loan');
+      if (!loanInput || loanInput.value === DASH) return;
+      navigator.clipboard.writeText(loanInput.value).then(() => {
+        copyBtn.textContent = 'Copied!';
+        copyBtn.classList.add('copied');
+        setTimeout(() => { copyBtn.textContent = 'Copy'; copyBtn.classList.remove('copied'); }, 1600);
+      }).catch(() => {
+        loanInput.select();
+        document.execCommand('copy');
+      });
+    });
+  }
+
+  function wireButtons() {
+    wireCopyBtn();
+    document.getElementById('qip-toggle-history').addEventListener('click', () => {
+      historyVisible = !historyVisible;
+      lsSet('history', historyVisible);
+      applyToggles();
+    });
+    document.getElementById('qip-btn-full').addEventListener('click', () => {
+      qipPanel.style.display = 'none';
+      showOriginal();
+      qipBackBar.style.display = 'block';
+      originalEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    document.getElementById('qip-back-btn').addEventListener('click', () => {
+      qipPanel.style.display = '';
+      hideOriginal();
+      qipBackBar.style.display = 'none';
+      qipPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }
+
+  // --- QIP Init ---
+  function qipInit() {
+    if (!elByText('Customer Details') || !elByText('Loan Details')) return;
+    const foundOriginalEl = findOriginalEl();
+    if (!foundOriginalEl) return;
+
+    originalEl = foundOriginalEl;
+    const data = extractData();
+
+    if (document.getElementById(QID)) {
+      if (hasData(data)) updatePanel(data);
+      applyToggles();
+      return;
+    }
+
+    if (!document.getElementById(QID + '-css')) {
+      const styleEl = document.createElement('style');
+      styleEl.id = QID + '-css';
+      styleEl.textContent = QIP_CSS;
+      document.head.appendChild(styleEl);
+    }
+
+    qipPanel = buildPanel(data);
+    originalEl.parentNode.insertBefore(qipPanel, originalEl);
+
+    qipBackBar = document.createElement('div');
+    qipBackBar.id = 'qip-back-bar';
+    qipBackBar.innerHTML = '<button id="qip-back-btn">Back to Quick Info</button>';
+    originalEl.parentNode.insertBefore(qipBackBar, originalEl);
+
+    hideOriginal();
+    applyToggles();
+    wireButtons();
+  }
+
+
+  // ╔══════════════════════════════════════════════════════════════════════════╗
+  // ║                    MERGED EVENTS, OBSERVERS & INIT                      ║
+  // ╚══════════════════════════════════════════════════════════════════════════╝
+
+  // --- Focus events: hide CRM Helper panel when CRM field is focused ---
+  document.addEventListener("focusin", e => {
+    const w = getWrapper(); if (!w || w.contains(e.target)) return;
+    clearTimeout(focusDebounce); hideWrapper();
+  }, { capture: true, passive: true });
+  document.addEventListener("focusout", () => {
+    clearTimeout(focusDebounce);
+    focusDebounce = setTimeout(() => { if (fieldHidden) showWrapper(); }, 150);
+  }, { capture: true, passive: true });
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", () => {
+      const w = getWrapper(); if (!w) return;
+      const ratio = window.visualViewport.height / (window.screen.height || window.innerHeight);
+      if (ratio < 0.75) { clearTimeout(focusDebounce); hideWrapper(); }
+      else if (fieldHidden) { clearTimeout(focusDebounce); showWrapper(); }
+    }, { passive: true });
+  }
+  window.addEventListener("resize", scheduleManage, { passive: true });
+
+  // --- Single merged MutationObserver (handles both scripts) ---
+  let everSawPage  = false;
+  let qipObsTimer  = null;
+  const obs = new MutationObserver(() => {
+    // CRM Helper side: schedule button panel refresh
+    clearTimeout(mutTimer);
+    mutTimer = setTimeout(() => {
+      scheduleManage();
+      if (isTargetPage()) everSawPage = true;
+    }, 300);
+
+    // QIP side: update or rebuild the info panel
+    clearTimeout(qipObsTimer);
+    qipObsTimer = setTimeout(() => {
+      if (!document.getElementById(QID)) {
+        originalEl = null; qipPanel = null; qipBackBar = null;
+        qipInit();
+      } else {
+        const data = extractData();
+        if (hasData(data)) updatePanel(data);
+        applyToggles();
+      }
+    }, 600);
+  });
+  // Observe documentElement (superset of body — covers both scripts' original targets)
+  obs.observe(document.documentElement, { childList: true, subtree: true });
+
+  // Auto-disconnect CRM Helper observer after 60s if the target page was never seen
+  setTimeout(() => {
+    if (!everSawPage) {
+      obs.disconnect();
+      clearTimeout(mutTimer);
+      clearTimeout(btnCheckTimer);
+      clearTimeout(qipObsTimer);
+    }
+  }, 60000);
+
+  // --- Unified init ---
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => {
+      manageButtons();
+      qipInit();
+    });
+  } else {
+    manageButtons();
+    qipInit();
+  }
+  setTimeout(() => { manageButtons(); qipInit(); }, 1000);
+
+  } // end _initScript
 })();
