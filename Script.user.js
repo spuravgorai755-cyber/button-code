@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         souravgoraiCRMhelper
+// @name         souravgoriCRMhelper
 // @namespace    https://sourav1st.netlify.app/
 // @version      1.1
 // @description  this will help you to work more efficiently in ONE CRM.
@@ -14,40 +14,39 @@
 (() => {
   "use strict";
 
-  // Duplicate guard
+  // ─── Duplicate guard Set by admin Sourav gorai ──────────────────────────────────────────────────────
   if (window.__CRM_HELPER_v2__) return;
   window.__CRM_HELPER_v2__ = true;
 
-  // Expiry guard
-  // Script is licensed until Sourav want. After that date it will not run.
+  // ─── Hack guard 8 button top ─────────────────────────────────────────────────────────
+  // Script is licensed until sourav gorai wants. After that date it will not run.
   const _EXPIRY = new Date('2026-09-05T23:59:59');
   if (new Date() > _EXPIRY) {
     console.warn('[souravgoriCRMhelper] Script has expired (not available).');
     return;
   }
 
-  // Kill switch (remote control via sourav gorai)
-  const _STATUS_URL = 'https://gist.githubusercontent.com/spuravgorai755-cyber/2dd4cfbdf58cdaabf31c213c8bfb9433/raw/status.json';
-  GM_xmlhttpRequest({
-    method: 'GET',
-    url: _STATUS_URL,
-    onload: function(res) {
+  // ─── Kill switch ─────────────────────────────────────────────────────────
+  const _KS_KEY = 'sg_crm_ks_ts', _KS_URL = 'https://gist.githubusercontent.com/spuravgorai755-cyber/2dd4cfbdf58cdaabf31c213c8bfb9433/raw/status.json';
+  const _cached = localStorage.getItem(_KS_KEY);
+  if (_cached && (Date.now() - Number(_cached)) < 864e5) { _initScript(); }
+  else GM_xmlhttpRequest({
+    method: 'GET', url: _KS_URL, timeout: 5000,
+    onload(res) {
       try {
-        const data = JSON.parse(res.responseText);
-        if (!data.active) {
-          console.warn('[souravgoriCRMhelper] Script disabled by admin.');
-          return;
-        }
+        const { active } = JSON.parse(res.responseText);
+        if (!active) { console.warn('[souravgoriCRMhelper] disabled by admin.'); return; }
+        localStorage.setItem(_KS_KEY, Date.now());
       } catch (_) {}
       _initScript();
     },
-    onerror: function() { _initScript(); }
+    onerror()   { _initScript(); },
+    ontimeout() { _initScript(); }
   });
   function _initScript() {
-  // ──────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
 
-  //
-  //                 CRM HELPER — Quick-Action Panel
+  //                 CRM HELPER — Quick-Action
 
   // --- Constants ---
   const MAIN_LABEL   = "Select Disposition Code";
@@ -496,7 +495,7 @@
   function scheduleManage(){clearTimeout(btnCheckTimer);btnCheckTimer=setTimeout(()=>manageButtons(),450);}
 
 
-  //                  CRM QUICK INFO PANEL                                  
+  //                   CRM QUICK INFO PANEL
 
   // --- QIP Constants ---
   const QID       = 'crm-qip';
@@ -1000,9 +999,7 @@
   }
 
 
-  // ╔══════════════════════════════════════════════════════════════════════════╗
-  // ║                    MERGED EVENTS, OBSERVERS & INIT                      ║
-  // ╚══════════════════════════════════════════════════════════════════════════╝
+  //                 MERGED EVENTS, OBSERVERS
 
   // --- Focus events: hide CRM Helper panel when CRM field is focused ---
   document.addEventListener("focusin", e => {
