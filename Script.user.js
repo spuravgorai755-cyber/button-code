@@ -16,7 +16,7 @@
 (() => {
   "use strict";
 
-  // Singleton guard — prevent double-init
+  // Singleton guard — prevent double-init, is it ok for everyone.
   if(window.__CRM_HELPER_v2__)return;
   window.__CRM_HELPER_v2__=true;
 
