@@ -16,30 +16,22 @@
 (() => {
   "use strict";
 
-  // Singleton guard — prevent double-init, is it ok for everyone.
   if(window.__CRM_HELPER_v2__)return;
   window.__CRM_HELPER_v2__=true;
 
-  // Hard expiry: Oct 10 2026 23:59:59 UTC
   if(Date.now()>179167*1e7+6799e3)return;
-
-  // Cache check: skip remote auth if last success was within 24h
   const _kk='sg_crm_ks_ts',_kc=localStorage.getItem(_kk);
-  if(_kc&&(Date.now()-+_kc)<864e5){_initScript();}else _req();
   let _rc=0;
-
-  // Version comparator (major.minor — returns true if current >= min)
+  if(_kc&&(Date.now()-+_kc)<864e5){_initScript();}else _req();
   function _vOk(c,m){if(!m)return true;const[a1,a2]=c.split('.').map(Number),[b1,b2]=m.split('.').map(Number);return a1>b1||(a1===b1&&a2>=b2);}
-
-  // Remote auth fetch with up to 5 retries and 18s backoff
   function _req(){if(_rc++>=5)return;GM_xmlhttpRequest({method:'GET',timeout:8e3,
     url:'https://gist.githubusercontent.com/spur'+'avgorai755-cyber/2dd4cfbdf58cdaa'+'bf31c213c8bfb9433/raw/status.json',
-    onload(r){try{const d=JSON.parse(r.responseText);if(!d.active||!_vOk('1.4',d.minVersion))return;localStorage.setItem(_kk,String(Date.now()));_initScript();}catch(_){setTimeout(_req,18e3);}},
+    onload(r){try{const d=JSON.parse(r.responseText);if(!d.active||!_vOk('1.3',d.minVersion))return;localStorage.setItem(_kk,String(Date.now()));_initScript();}catch(_){setTimeout(_req,18e3);}},
     onerror(){setTimeout(_req,18e3);},ontimeout(){setTimeout(_req,18e3);}});}
 
   function _initScript() {
 
-  //                 CRM HELPER — Quick-Action
+  //                 CRM HELPER â€” Quick-Action
 
   // --- Constants ---
   const MAIN_LABEL   = "Select Disposition Code";
@@ -102,9 +94,9 @@
   let fieldHidden = false, focusDebounce = null, wrapBaseTransform = "none";
   let isDragging = false, _dW = null, _dSX = 0, _dSY = 0, _dSL = 0, _dSB = 0, _dSW = 0, _dSH = 0;
   const activeBtns = {};
-  if(1791676799e3<Date.now())return; // Inner expiry: Oct 10 2026 23:59:59 UTC
+  if(1791676799e3<Date.now())return;
 
-  // --- Settings (persisted to localStorage) ---
+  // --- Settings (persist to localStorage) ---
   const DEF_CFG = { position: "bottom-right", customLeft: null, customBottom: null, othersExpanded: false };
   function loadSettings() { try { return Object.assign({}, DEF_CFG, JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}")); } catch (_) { return Object.assign({}, DEF_CFG); } }
   function saveSettings() { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(cfg)); } catch (_) {} }
@@ -121,7 +113,7 @@
   function labelMatch(a, b) { const s = cleanText(a), t = cleanText(b); return !!(s && t && (s === t || s.includes(t))); }
   function getWrapper() { return document.getElementById(WRAP_ID); }
 
-  // --- Field finding: by attribute, then by label walk ---
+  // --- Field finding: by attribute then by label walk ---
   function findByAttr(lbl) {
     for (const el of document.querySelectorAll(CTRL_SEL)) {
       if (!isVisible(el) || isDisabled(el)) continue;
@@ -183,13 +175,13 @@
   }
   const toast = { ok: m => showToast(m, false), err: m => showToast(m, true) };
 
-  // --- Retry helpers (7s timeout, 350ms poll interval) ---
+  // --- Retry helpers (7s timeout, 350ms interval) ---
   async function retryUntil(fn, failMsg) { const end = Date.now() + 7000; while (Date.now() < end) { if (await fn()) return true; await wait(350); } toast.err(typeof failMsg === "function" ? failMsg() : failMsg); return false; }
   async function retryField(lbl, spec) { let found = false; return retryUntil(() => { const c = findField(lbl); if (c) { found = true; if (setCtrlVal(c, spec)) return true; } return false; }, () => found ? `Missing option: ${resolve(spec, null)}` : `Missing field: ${lbl}`); }
   async function retryFocus(lbl) { return retryUntil(() => { const c = findField(lbl); if (!c) return false; try { c.scrollIntoView({ block:"center" }); } catch (_) {} try { c.focus({ preventScroll:true }); } catch (_) { try { c.focus(); } catch (__) {} } try { if (typeof c.select === "function") c.select(); } catch (_) {} try { c.dispatchEvent(new Event("input",{bubbles:true})); } catch (_) {} return true; }, `Missing field: ${lbl}`); }
   async function retryBtn(texts, name) { return retryUntil(() => { const b = findBtn(texts); if (!b) return false; try { b.click(); return true; } catch (_) { return false; } }, `Missing button: ${name}`); }
 
-  // --- Amount scraper: "Total Overdue (C)" ---
+  // --- Amount finder: scrapes "Total Overdue (C)" from page ---
   function extractAmt(text) { const m = String(text || "").match(/Rs\.?\s*([\d,]+(?:\.\d+)?)/i); return m ? m[1].replace(/,/g,"") : null; }
   function findOverdueAmt() {
     const lt = cleanText("Total Overdue (C)"); let ex = null, pm = null;
@@ -205,7 +197,7 @@
     return near.length ? near[0].amt : null;
   }
 
-  // --- Amount scraper: "Last Paid Amount" (fallback when Total Overdue is 0) ---
+  // --- Amount finder: scrapes "Last Paid Amount" from page (fallback when Total Overdue is 0) ---
   function findLastPaidAmt() {
     const lt = cleanText("Last Paid Amount"); let ex = null, pm = null;
     for (const el of document.querySelectorAll("td,div,span,p,li,label,h1,h2,h3,h4,h5,h6")) { if (!isVisible(el)) continue; const c = cleanText(el.innerText || el.textContent || ""); if (!c || c.length > lt.length + 25) continue; if (c === lt) { ex = el; break; } if (!pm && c.includes(lt)) pm = el; }
@@ -220,7 +212,7 @@
     return near.length ? near[0].amt : null;
   }
 
-  // --- Button / element finder and safe click ---
+  // --- Button/element finder and safe click ---
   function btnTxt(el) { return [el.innerText, el.textContent, el.value, el.getAttribute("aria-label"), el.getAttribute("title")].filter(Boolean).join(" "); }
   function findBtn(texts) { const wl = texts.map(t => cleanText(t)), cands = Array.from(document.querySelectorAll("button,[role='button'],input[type='button'],input[type='submit'],a")).filter(el => isVisible(el) && !isDisabled(el)); return cands.find(el => wl.some(w => cleanText(btnTxt(el)) === w)) || cands.find(el => wl.some(w => cleanText(btnTxt(el)).includes(w))) || null; }
   function safeClick(el) { if (!el) return false; try { ["mousedown","mouseup"].forEach(ev => el.dispatchEvent(new MouseEvent(ev,{bubbles:true,cancelable:true}))); typeof el.click === "function" ? el.click() : el.dispatchEvent(new MouseEvent("click",{bubbles:true,cancelable:true})); return true; } catch (_) { try { el.click(); return true; } catch (__) { return false; } } }
@@ -267,7 +259,7 @@
   async function runAction(btn, name) {
     if (name === "OTHERS") { othersOpen = !othersOpen; cfg.othersExpanded = othersOpen; saveSettings(); manageButtons(); return; }
     if (!startLoad(btn)) return;
-    if(Date.now()>1791676799*1e3){stopLoad(btn);return;} // Action-level expiry guard: Oct 10 2026
+    if(Date.now()>1791676799*1e3){stopLoad(btn);return;}
     btnActive = true; let ok = false;
     try {
       if      (name==="PTP")      { await runPLNK(); ok = await runPTP(); }
@@ -295,7 +287,7 @@
   function isLabelVisible() { const tgt=cleanText(MAIN_LABEL),vh=window.innerHeight||640; for(const el of document.querySelectorAll("label,mat-label,legend,span,div,p,td,th,li,h1,h2,h3,h4,h5,h6")){const t=cleanText(el.innerText||el.textContent||"");if(!t||t.length>tgt.length+25||!t.includes(tgt)||!isVisible(el))continue;const r=el.getBoundingClientRect();if(r.width>0&&r.height>0&&r.bottom>-150&&r.top<vh+150)return true;}return false; }
   function isTargetPage() { return isLabelVisible() && !!(findField(MAIN_LABEL) || findSelActCtrl()); }
 
-  // --- Button layout data (returns [] after Oct 10 2026 local time) ---
+  // --- Button layout data ---
   function getBtnData() {
     if(!isTargetPage()||Date.now()>+new Date(2026,9,10,23,59,59))return[];
     const d=[
@@ -406,14 +398,14 @@
     btn.addEventListener("pointercancel",e=>{if(_dW){_dW.style.transition=TRANS;_dW=null;}try{btn.releasePointerCapture(e.pointerId);}catch(_){}isDragging=false;});
   }
 
-  // --- Button HTML helper (supports \n as <br> in names) ---
+  // --- Helper: set button HTML content (supports \n as <br> in names) ---
   function setBtnHTML(btn, name) {
     const html = (name||"").replace(/\n/g,"<br>");
     btn.dataset.sgOriginalHTML = html;
     btn.innerHTML = html;
   }
 
-  // --- Double-tap safety: first tap shows "TAP AGAIN", second executes ---
+  // --- Double-tap safety: first tap shows "TAP AGAIN", second tap executes ---
   function attachClick(btn, name) {
     btn.addEventListener("dblclick", e=>{e.preventDefault();e.stopPropagation();}, true);
     btn.addEventListener("click", e => {
@@ -502,7 +494,6 @@
   const LS_PREFIX = 'crm-qip:';
   const DASH      = '\u2013';
 
-  // --- QIP CSS ---
   const QIP_CSS = `
     #${QID} {
       font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', Arial, sans-serif;
@@ -718,7 +709,6 @@
     try { localStorage.setItem(LS_PREFIX + key, String(value)); } catch {}
   }
 
-  // Tree-walk element finders (partial and exact text match)
   function elByText(text, root) {
     const walker = document.createTreeWalker(root ?? document.body, NodeFilter.SHOW_TEXT);
     let node;
@@ -727,6 +717,7 @@
     }
     return null;
   }
+
   function elByExact(text, root) {
     const walker = document.createTreeWalker(root ?? document.body, NodeFilter.SHOW_TEXT);
     let node;
@@ -736,7 +727,6 @@
     return null;
   }
 
-  // Walk up to find a card-sized ancestor container
   function cardOf(headingEl) {
     if (!headingEl) return null;
     let el = headingEl.parentElement;
@@ -748,7 +738,6 @@
     return null;
   }
 
-  // Read sibling/parent value next to a label element
   function readVal(labelEl) {
     if (!labelEl) return DASH;
     const sibling = labelEl.nextElementSibling;
@@ -766,7 +755,6 @@
     return DASH;
   }
 
-  // Convenience: find label in card, then read its value
   function qipVal(card, labelText) {
     if (!card) return DASH;
     return readVal(elByExact(labelText, card) ?? elByText(labelText, card));
@@ -803,12 +791,10 @@
     };
   }
 
-  // True if any field has real data (not just dashes)
   function hasData(data) {
     return Object.values(data).some(v => v !== DASH);
   }
 
-  // Walk up from "Customer Details" to find the root info block
   function findOriginalEl() {
     const customerEl = elByText('Customer Details');
     if (!customerEl) return null;
@@ -827,7 +813,6 @@
     return null;
   }
 
-  // Find the follow-up history container
   function findHistoryEl() {
     const el = elByText('FOLLOW UP HISTORY');
     if (!el) return null;
@@ -843,7 +828,6 @@
     return null;
   }
 
-  // Hide / show the original CRM info block (replaced by QIP panel)
   function hideOriginal() {
     if (!originalEl) return;
     Object.assign(originalEl.style, {
@@ -851,6 +835,7 @@
       visibility: 'hidden', display: 'block'
     });
   }
+
   function showOriginal() {
     if (!originalEl) return;
     Object.assign(originalEl.style, {
@@ -858,7 +843,6 @@
     });
   }
 
-  // Sync history toggle button and panel visibility
   function applyToggles() {
     const historyEl = findHistoryEl();
     if (historyEl) historyEl.style.display = historyVisible ? '' : 'none';
@@ -915,7 +899,6 @@
     return div;
   }
 
-  // --- QIP Panel updater (live data refresh without rebuild) ---
   function updatePanel(data) {
     const setText = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
     setText('qip-name',           data.name);
@@ -981,14 +964,12 @@
     originalEl = foundOriginalEl;
     const data = extractData();
 
-    // Panel already exists — just refresh data
     if (document.getElementById(QID)) {
       if (hasData(data)) updatePanel(data);
       applyToggles();
       return;
     }
 
-    // Inject QIP styles once
     if (!document.getElementById(QID + '-css')) {
       const styleEl = document.createElement('style');
       styleEl.id = QID + '-css';
@@ -996,7 +977,6 @@
       document.head.appendChild(styleEl);
     }
 
-    // Build and insert panel + back bar above the original block
     qipPanel = buildPanel(data);
     originalEl.parentNode.insertBefore(qipPanel, originalEl);
 
@@ -1013,7 +993,7 @@
 
   //                 MERGED EVENTS, OBSERVERS
 
-  // --- Focus events: hide CRM Helper panel when a CRM field is focused ---
+  // --- Focus events: hide CRM Helper panel when CRM field is focused ---
   document.addEventListener("focusin", e => {
     const w = getWrapper(); if (!w || w.contains(e.target)) return;
     clearTimeout(focusDebounce); hideWrapper();
@@ -1022,7 +1002,6 @@
     clearTimeout(focusDebounce);
     focusDebounce = setTimeout(() => { if (fieldHidden) showWrapper(); }, 150);
   }, { capture: true, passive: true });
-  // Visual viewport resize: hide panel when software keyboard appears
   if (window.visualViewport) {
     window.visualViewport.addEventListener("resize", () => {
       const w = getWrapper(); if (!w) return;
@@ -1033,7 +1012,7 @@
   }
   window.addEventListener("resize", scheduleManage, { passive: true });
 
-  // --- Single merged MutationObserver (handles both CRM Helper and QIP) ---
+  // --- Single merged MutationObserver (handles both scripts) ---
   let everSawPage  = false;
   let qipObsTimer  = null;
   const obs = new MutationObserver(() => {
@@ -1057,10 +1036,10 @@
       }
     }, 600);
   });
-  // Observe documentElement (superset of body — covers both scripts' targets)
+  // Observe documentElement (superset of body â€” covers both scripts' original targets)
   obs.observe(document.documentElement, { childList: true, subtree: true });
 
-  // Auto-disconnect observer after 60s if target page was never seen
+  // Auto-disconnect CRM Helper observer after 60s if the target page was never seen
   setTimeout(() => {
     if (!everSawPage) {
       obs.disconnect();
