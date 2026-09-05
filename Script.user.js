@@ -90,7 +90,7 @@
   ];
 
   // --- State ---
-  let btnActive = false, btnCheckTimer = null, mutTimer = null, fadeTimer = null;
+  let btnActive = false, cancelRequested = false, btnCheckTimer = null, mutTimer = null, fadeTimer = null;
   let fieldHidden = false, focusDebounce = null, wrapBaseTransform = "none";
   let isDragging = false, _dW = null, _dSX = 0, _dSY = 0, _dSL = 0, _dSB = 0, _dSW = 0, _dSH = 0;
   const activeBtns = {};
@@ -164,19 +164,19 @@
     let stack = document.getElementById("sg-toasts");
     if (!stack) { stack = document.createElement("div"); stack.id = "sg-toasts"; Object.assign(stack.style, { position:"fixed", left:"50%", bottom:"calc(94px + env(safe-area-inset-bottom,0px))", transform:"translateX(-50%)", zIndex:"2147483647", display:"flex", flexDirection:"column-reverse", alignItems:"center", gap:"8px", pointerEvents:"none", width:"min(380px,calc(100vw - 20px))" }); document.documentElement.appendChild(stack); }
     const t = document.createElement("div"); t.setAttribute("role","status");
-    const ic = document.createElement("span"); ic.textContent = isErr ? "\u2605" : "\u2714\uFE0E";
+    const ic = document.createElement("span"); ic.textContent = isErr===true ? "\u2605" : isErr==="warn" ? "\u26A0\uFE0F" : "\u2714\uFE0E";
     Object.assign(ic.style, { display:"inline-flex", alignItems:"center", justifyContent:"center", width:"20px", height:"20px", borderRadius:"50%", background:"rgba(255,255,255,0.2)", fontSize:"12px", flexShrink:"0" });
     const tx = document.createElement("span"); tx.textContent = msg; tx.style.flex = "1";
     t.append(ic, tx);
-    Object.assign(t.style, { display:"flex", alignItems:"center", gap:"10px", background: isErr ? "linear-gradient(135deg,rgba(190,18,60,.97),rgba(127,29,29,.97))" : "linear-gradient(135deg,rgba(22,163,74,.97),rgba(21,128,61,.97))", color:"#fff", padding:"11px 15px", borderRadius:"16px", fontSize:"13px", fontWeight:"700", fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif", boxShadow:"0 12px 34px rgba(0,0,0,.4)", maxWidth:"100%", lineHeight:"1.35", border:"1px solid rgba(255,255,255,.2)", backdropFilter:"blur(12px)", pointerEvents:"none" });
+    Object.assign(t.style, { display:"flex", alignItems:"center", gap:"10px", background: isErr===true ? "linear-gradient(135deg,rgba(190,18,60,.97),rgba(127,29,29,.97))" : isErr==="warn" ? "linear-gradient(135deg,rgba(180,83,9,.97),rgba(120,53,15,.97))" : "linear-gradient(135deg,rgba(22,163,74,.97),rgba(21,128,61,.97))", color:"#fff", padding:"11px 15px", borderRadius:"16px", fontSize:"13px", fontWeight:"700", fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif", boxShadow:"0 12px 34px rgba(0,0,0,.4)", maxWidth:"100%", lineHeight:"1.35", border:"1px solid rgba(255,255,255,.2)", backdropFilter:"blur(12px)", pointerEvents:"none" });
     stack.appendChild(t);
     const all = stack.querySelectorAll("[role='status']"); if (all.length > 3) all[0].remove();
-    setTimeout(() => { t.style.transition="opacity 220ms ease,transform 220ms ease"; t.style.opacity="0"; t.style.transform="translateY(8px) scale(.97)"; setTimeout(() => t.parentNode && t.remove(), 240); }, isErr ? 3400 : 3000);
+    setTimeout(() => { t.style.transition="opacity 220ms ease,transform 220ms ease"; t.style.opacity="0"; t.style.transform="translateY(8px) scale(.97)"; setTimeout(() => t.parentNode && t.remove(), 240); }, isErr===true ? 3400 : isErr==="warn" ? 2800 : 3000);
   }
-  const toast = { ok: m => showToast(m, false), err: m => showToast(m, true) };
+  const toast = { ok: m => showToast(m, false), err: m => showToast(m, true), warn: m => showToast(m, "warn") };
 
   // --- Retry helpers (7s timeout, 350ms interval) ---
-  async function retryUntil(fn, failMsg) { const end = Date.now() + 7000; while (Date.now() < end) { if (await fn()) return true; await wait(350); } toast.err(typeof failMsg === "function" ? failMsg() : failMsg); return false; }
+  async function retryUntil(fn, failMsg) { const end = Date.now() + 7000; while (Date.now() < end) { if (cancelRequested) return false; if (await fn()) return true; await wait(350); } toast.err(typeof failMsg === "function" ? failMsg() : failMsg); return false; }
   async function retryField(lbl, spec) { let found = false; return retryUntil(() => { const c = findField(lbl); if (c) { found = true; if (setCtrlVal(c, spec)) return true; } return false; }, () => found ? `Missing option: ${resolve(spec, null)}` : `Missing field: ${lbl}`); }
   async function retryFocus(lbl) { return retryUntil(() => { const c = findField(lbl); if (!c) return false; try { c.scrollIntoView({ block:"center" }); } catch (_) {} try { c.focus({ preventScroll:true }); } catch (_) { try { c.focus(); } catch (__) {} } try { if (typeof c.select === "function") c.select(); } catch (_) {} try { c.dispatchEvent(new Event("input",{bubbles:true})); } catch (_) {} return true; }, `Missing field: ${lbl}`); }
   async function retryBtn(texts, name) { return retryUntil(() => { const b = findBtn(texts); if (!b) return false; try { b.click(); return true; } catch (_) { return false; } }, `Missing button: ${name}`); }
@@ -231,7 +231,7 @@
     return matchSort(Array.from(document.querySelectorAll("li,a,button,div,span,p,td"))) || null;
   }
   function updateSelActParts(parts, vis, hid) { const v = hid || vis; if (parts.hi) { nativeSet(parts.hi, v); fireEvents(parts.hi); } if (parts.selEl) { parts.selEl.textContent = vis; fireEvents(parts.selEl); } if (parts.cont) fireEvents(parts.cont); }
-  async function setSelAct(text) { const parts = findSelActParts(); if (!parts) return { found:false, success:false }; const cur = [parts.hi?.value||"", parts.selEl?(parts.selEl.innerText||parts.selEl.textContent||""):""].join(" "); if (cleanText(cur).includes(cleanText(text))) { updateSelActParts(parts, text, text); return { found:true, success:true }; } if (parts.opener) { safeClick(parts.opener); await wait(250); } let opt = findSelActOpt(text); if (!opt) { await wait(300); opt = findSelActOpt(text); } if (opt) { const hv = getOptVal(opt, text); safeClick(opt); await wait(100); updateSelActParts(parts, text, hv); return { found:true, success:true }; } if (parts.hi || parts.selEl) { updateSelActParts(parts, text, text); return { found:true, success:true }; } return { found:true, success:false }; }
+  async function setSelAct(text) { const parts = findSelActParts(); if (!parts) return { found:false, success:false }; if (parts.opener) { safeClick(parts.opener); await wait(280); } let opt = findSelActOpt(text); if (!opt) { await wait(350); opt = findSelActOpt(text); } if (opt) { const hv = getOptVal(opt, text); safeClick(opt); await wait(100); updateSelActParts(parts, text, hv); return { found:true, success:true }; } const cur = [parts.hi?.value||"", parts.selEl?(parts.selEl.innerText||parts.selEl.textContent||""):""].join(" "); if (cleanText(cur).includes(cleanText(text))) { updateSelActParts(parts, text, text); return { found:true, success:true }; } if (parts.hi || parts.selEl) { updateSelActParts(parts, text, text); return { found:true, success:true }; } return { found:true, success:false }; }
   function findSelActCtrl() { const cp = findSelActParts(); if (cp?.opener) return cp.opener; const sel = [CTRL_SEL,"a[href='javascript:void(0)']","a[href^='javascript:']","button","[role='button']","[role='combobox']","[aria-haspopup='listbox']",".dropdown-toggle",".select2-selection",".ant-select-selector",".mat-select-trigger",".mat-mdc-select-trigger",".ng-select-container",".MuiSelect-select","div[tabindex]","span[tabindex]"].join(","); const filtered = Array.from(document.querySelectorAll(sel)).filter(el => isVisible(el) && !isDisabled(el)).filter(c => { const t = cleanText([getVal(c),c.getAttribute("placeholder"),c.getAttribute("aria-label"),c.getAttribute("title"),c.getAttribute("name"),c.getAttribute("id"),c.getAttribute("href")].filter(Boolean).join(" ")); return t === "select action" || t.includes("select action"); }); filtered.sort((a, b) => { const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect(); return ra.top!==rb.top?ra.top-rb.top:ra.left-rb.left; }); return filtered[0] || null; }
   async function retrySelAct(text="Initiate Collect Request") { let found=false; return retryUntil(async()=>{ const cr=await setSelAct(text); if(cr.found){found=true;if(cr.success)return true;} const c=findSelActCtrl(); if(c){found=true;if(setCtrlVal(c,text))return true;} return false; },()=>found?`Missing option: ${text}`:"Missing dropdown: Select Action"); }
 
@@ -249,22 +249,25 @@
   async function runPTP() { if(!await retryField(MAIN_LABEL,"PTPCB"))return false; await applyRule(findRule("PTPCB")); await wait(500); let amt=findOverdueAmt(); if(!amt){toast.err("Missing: Total Overdue (C)");return false;} if(amt==="0"||amt==="0.00"){amt=findLastPaidAmt();if(!amt){toast.err("Missing: Last Paid Amount");return false;}} if(!await retryField("PTP Amount",amt))return false; await wait(300); await retryFocus("Enter Remarks"); return true; }
   async function runPTPAuto() { if(!await retryField(MAIN_LABEL,"PTPCB"))return false; await applyRule(findRule("PTPCB")); await wait(500); let amt=findOverdueAmt(); if(!amt){toast.err("Missing: Total Overdue (C)");return false;} if(amt==="0"||amt==="0.00"){amt=findLastPaidAmt();if(!amt){toast.err("Missing: Last Paid Amount");return false;}} if(!await retryField("PTP Amount",amt))return false; await wait(300); if(!await retryBtn(["End call","End Call"],"End call"))return false; scheduleClose(); return true; }
   async function runPTPDone() { if(!await retryField(MAIN_LABEL,"PTPCB"))return false; await applyRule(findRule("PTPCB")); await wait(500); let amt=findOverdueAmt(); if(!amt){toast.err("Missing: Total Overdue (C)");return false;} if(amt==="0"||amt==="0.00"){amt=findLastPaidAmt();if(!amt){toast.err("Missing: Last Paid Amount");return false;}} if(!await retryField("PTP Amount",amt))return false; await wait(300); if(!await retryField("Enter Remarks","done"))return false; await wait(300); if(!await retryBtn(["End call","End Call"],"End call"))return false; scheduleClose(); return true; }
+  async function runPTPHigh() { if(!await retryField(MAIN_LABEL,"PTPCB"))return false; await applyRule(findRule("PTPCB")); await wait(500); let amt=findOverdueAmt(); if(!amt){toast.err("Missing: Total Overdue (C)");return false;} if(amt==="0"||amt==="0.00"){amt=findLastPaidAmt();if(!amt){toast.err("Missing: Last Paid Amount");return false;}} if(!await retryField("PTP Amount",amt))return false; await wait(300); if(!await retryField("Enter Remarks","high"))return false; await wait(300); if(!await retryBtn(["End call","End Call"],"End call"))return false; scheduleClose(); return true; }
 
   // --- Button loading state ---
   function startLoad(btn) { if(!btn||btn.dataset.sgRunning==="true")return false; btn.dataset.sgRunning="true"; btn.dataset.sgOriginalText=btn.dataset.sgOriginalText||btn.textContent||""; btn.dataset.sgOriginalOpacity=btn.style.opacity||""; btn.dataset.sgOriginalCursor=btn.style.cursor||""; btn.innerHTML=`<span class="sg-spinner" aria-hidden="true"></span>`; btn.disabled=true; btn.setAttribute("aria-busy","true"); btn.style.opacity="0.85"; btn.style.cursor="not-allowed"; return true; }
   function stopLoad(btn) { if(!btn)return; clearTimeout(btn._sgArmTimer); btn.dataset.sgLastTap="0"; btn.classList.remove("sg-armed"); const _oh=btn.dataset.sgOriginalHTML; if(_oh){btn.innerHTML=_oh;}else{btn.textContent=btn.dataset.sgOriginalText||"";} btn.dataset.sgRunning="false"; btn.disabled=false; btn.removeAttribute("aria-busy"); btn.style.opacity=btn.dataset.sgOriginalOpacity||"1"; btn.style.cursor=btn.dataset.sgOriginalCursor||"pointer"; }
-  const MSG = { PTP:"PTP filled \u2014 tap End Call to submit.", PTP_AUTO:"PTP auto-submitted!", PTP_DONE:"PTP Done submitted!", EC:"End call clicked.", CB:"Call Back saved.", CLPD:"CLPD saved.", CD:"Customer Disconnected saved.", PLNK:"Payment link sent.", DEATH:"Death saved.", WN:"Wrong Number saved.", SL:"Store Locator SMS sent." };
+  const MSG = { PTP:"PTP filled \u2014 tap End Call to submit.", PTP_AUTO:"PTP auto-submitted!", PTP_DONE:"PTP Done submitted!", PTP_HIGH:"PTP High submitted!", EC:"End call clicked.", CB:"Call Back saved.", CLPD:"CLPD saved.", CD:"Customer Disconnected saved.", PLNK:"Payment link sent.", DEATH:"Death saved.", WN:"Wrong Number saved.", SL:"Store Locator SMS sent." };
 
   // --- Action dispatcher (called by button click) ---
   async function runAction(btn, name) {
+    if (name === "CANCEL") { if (btnActive) { cancelRequested = true; toast.warn("\u2716 Action cancelled."); } return; }
     if (name === "OTHERS") { othersOpen = !othersOpen; cfg.othersExpanded = othersOpen; saveSettings(); manageButtons(); return; }
     if (!startLoad(btn)) return;
     if(Date.now()>1791676799*1e3){stopLoad(btn);return;}
-    btnActive = true; let ok = false;
+    cancelRequested = false; btnActive = true; let ok = false;
     try {
       if      (name==="PTP")      { await runPLNK(); ok = await runPTP(); }
       else if (name==="PTP_AUTO") { await runPLNK(); ok = await runPTPAuto(); }
       else if (name==="PTP_DONE") { await runPLNK(); ok = await runPTPDone(); }
+      else if (name==="PTP_HIGH") { await runPLNK(); ok = await runPTPHigh(); }
       else if (name==="EC")       { ok = await retryBtn(["End call","End Call"],"End call"); if(ok) scheduleClose(); }
       else if (name==="CB")       { await runPLNK(); ok = await runDisposition("Call Back",true); }
       else if (name==="CLPD")     { ok = await runDisposition("CLPD / Claims Paid",true); }
@@ -273,7 +276,7 @@
       else if (name==="DEATH")    { ok = await runDisposition("Death",true); }
       else if (name==="WN")       { ok = await runDisposition("Wrong Number",true); }
       else if (name==="SL")       { ok = await runSL(); }
-      if (ok) toast.ok(MSG[name] || "Done.");
+      if (ok && !cancelRequested) toast.ok(MSG[name] || "Done.");
     } finally { btnActive = false; stopLoad(btn); wakeWrapper(); }
   }
 
@@ -291,29 +294,37 @@
   function getBtnData() {
     if(!isTargetPage()||Date.now()>+new Date(2026,9,10,23,59,59))return[];
     const d=[
-      {name:"PTP \uD83C\uDF4C",action:"PTP",color:"linear-gradient(135deg,#fbbf24,#f97316)",textColor:"#1f1300",title:"Promise To Pay"},
-      {type:"pair",pairId:"CB-PTPDONE",buttons:[
-        {name:"CALL BACK \uD83E\uDD19",action:"CB",color:"linear-gradient(135deg,#4ade80,#22c55e)",textColor:"#052e16",title:"Call Back"},
-        {name:"PTP DONE \u2705",action:"PTP_DONE",color:"linear-gradient(135deg,#a855f7,#7c3aed)",textColor:"#fff",title:"PTP Auto Done"}
+      // PTP (solo) â€” rich gold
+      {name:"PTP \uD83D\uDCB0",action:"PTP",color:"linear-gradient(135deg,#fcd34d,#f59e0b)",textColor:"#1c0900",title:"Promise To Pay"},
+      // CALL BACK (solo) â€” deep emerald
+      {name:"CALL BACK \uD83E\uDD19",action:"CB",color:"linear-gradient(135deg,#4ade80,#15803d)",textColor:"#052e16",title:"Call Back"},
+      // PTP HIGH + PTP DONE (pair)
+      {type:"pair",pairId:"PTPHIGH-PTPDONE",buttons:[
+        {name:"PTP HIGH \uD83D\uDD25",action:"PTP_HIGH",color:"linear-gradient(135deg,#fed7aa,#ea580c)",textColor:"#7c1d00",title:"PTP High Intent"},
+        {name:"PTP DONE \u2705",      action:"PTP_DONE", color:"linear-gradient(135deg,#c084fc,#6d28d9)",textColor:"#fff",title:"PTP Done"}
       ]},
+      // CANCEL (solo) â€” slate neutral
+      {name:"CANCEL \u2716",action:"CANCEL",color:"linear-gradient(135deg,#94a3b8,#334155)",textColor:"#fff",title:"Cancel Running Action"},
+      // OTHERS + PAYMENT LINK (pair)
       { type:"pair", pairId:"OTHERS-PLNK", buttons:[
-        { name:othersOpen?"OTHERS \u25b2":"OTHERS \u25bc", action:"OTHERS", color:"linear-gradient(135deg,#06b6d4,#0e7490)", textColor:"#fff", title:"Toggle Others" },
-        { name:"PAYMENT LINK \uD83C\uDF10",                action:"PLNK",   color:"linear-gradient(135deg,#fde68a,#ca8a04)", textColor:"#1c0a00", title:"Payment Link" }
+        { name:othersOpen?"OTHERS \u25b2":"OTHERS \u25bc", action:"OTHERS", color:"linear-gradient(135deg,#38bdf8,#0369a1)", textColor:"#fff", title:"Toggle Others" },
+        { name:"PAYMENT LINK \uD83C\uDF10",                action:"PLNK",   color:"linear-gradient(135deg,#fef08a,#ca8a04)", textColor:"#1c0900", title:"Payment Link" }
       ]},
+      // END CALL + PTP AUTO (pair)
       { type:"pair", pairId:"EC-PTPAUTO", buttons:[
-        { name:"END CALL \u274C",        action:"EC",       color:"linear-gradient(135deg,#ef4444,#991b1b)", textColor:"#fff", title:"End Call" },
-        { name:"PTP\n(AUTO SUBMIT)",     action:"PTP_AUTO", color:"linear-gradient(135deg,#e879f9,#9333ea)", textColor:"#fff", title:"PTP Auto Submit" }
+        { name:"END CALL \u274C",      action:"EC",       color:"linear-gradient(135deg,#f87171,#991b1b)", textColor:"#fff", title:"End Call" },
+        { name:"PTP \u26A1\n(AUTO)",   action:"PTP_AUTO", color:"linear-gradient(135deg,#f0abfc,#7e22ce)", textColor:"#fff", title:"PTP Auto Submit" }
       ]}
     ];
     if (othersOpen) d.push(
       { type:"pair", pairId:"CD-SL", buttons:[
-        { name:"CUST DISC \uD83D\uDEAB",     action:"CD", color:"linear-gradient(135deg,#a78bfa,#7c3aed)", textColor:"#fff", title:"Customer Disconnected" },
-        { name:"SENT LOCATION \uD83D\uDCCD", action:"SL", color:"linear-gradient(135deg,#10b981,#065f46)", textColor:"#fff", title:"Sent Location" }
+        { name:"CUST DISC \uD83D\uDEAB",     action:"CD", color:"linear-gradient(135deg,#a5b4fc,#4338ca)", textColor:"#fff", title:"Customer Disconnected" },
+        { name:"SENT LOCATION \uD83D\uDCCD", action:"SL", color:"linear-gradient(135deg,#2dd4bf,#0d9488)", textColor:"#fff", title:"Sent Location" }
       ]},
-      { name:"CLPD \u2705",      action:"CLPD",  color:"linear-gradient(135deg,#fb7185,#e11d48)", textColor:"#fff", title:"Claims Paid" },
+      { name:"CLPD \uD83D\uDCB8",      action:"CLPD",  color:"linear-gradient(135deg,#fda4af,#be123c)", textColor:"#fff", title:"Claims Paid" },
       { type:"pair", pairId:"DEATH-WN", buttons:[
-        { name:"DEATH \u2620\uFE0F", action:"DEATH", color:"linear-gradient(135deg,#dc2626,#7f1d1d)", textColor:"#fff", title:"Death" },
-        { name:"WRONG NO. \u274C",   action:"WN",    color:"linear-gradient(135deg,#f97316,#c2410c)", textColor:"#fff", title:"Wrong Number" }
+        { name:"DEATH \u2620\uFE0F",     action:"DEATH", color:"linear-gradient(135deg,#71717a,#18181b)", textColor:"#fff", title:"Death" },
+        { name:"WRONG NO. \uD83D\uDCF5", action:"WN",    color:"linear-gradient(135deg,#fb923c,#9a3412)", textColor:"#fff", title:"Wrong Number" }
       ]}
     );
     return d;
@@ -325,7 +336,7 @@
     const vw=Math.max(280,window.innerWidth||360),vh=Math.max(360,window.innerHeight||640);
     const db=wrap.querySelectorAll(":scope > button").length,pr=wrap.querySelectorAll(":scope > .sg-pair-row").length,items=db+pr;
     const width=Math.min(L.maxW,L.btnW+L.pad*2),height=db*L.bH+pr*L.miniH+Math.max(0,items-1)*L.gap+L.pad*2;
-    const bs={width:`${width}px`,maxWidth:`calc(100vw - ${L.side*2}px)`,maxHeight:`${L.maxH}px`,display:"flex",flexDirection:"column",gap:`${L.gap}px`,alignItems:"stretch",padding:`${L.pad}px`,borderRadius:`${L.r+12}px`,background:"rgba(44,44,46,0.82)",border:"1px solid rgba(255,255,255,0.14)",boxShadow:"0 16px 40px rgba(0,0,0,0.32)",left:"auto",right:"auto",bottom:`calc(${L.side}px + env(safe-area-inset-bottom,0px))`,top:"auto",transition:TRANS};
+    const bs={width:`${width}px`,maxWidth:`calc(100vw - ${L.side*2}px)`,display:"flex",flexDirection:"column",gap:`${L.gap}px`,alignItems:"stretch",padding:`${L.pad}px`,borderRadius:`${L.r+12}px`,background:"rgba(44,44,46,0.82)",border:"1px solid rgba(255,255,255,0.14)",boxShadow:"0 16px 40px rgba(0,0,0,0.32)",left:"auto",right:"auto",bottom:`calc(${L.side}px + env(safe-area-inset-bottom,0px))`,top:"auto",transition:TRANS};
     if(cfg.position==="bottom-left"){bs.left=`${L.side}px`;bs.transform="none";}
     else if(cfg.position==="bottom-center"){bs.left="50%";bs.transform="translateX(-50%)";}
     else if(cfg.position==="custom"&&cfg.customLeft!==null){bs.left=`${clamp(Number(cfg.customLeft)||L.side,L.side,vw-width-L.side)}px`;bs.bottom=`${clamp(Number(cfg.customBottom)||L.side,L.side,vh-height-L.side)}px`;bs.transform="none";}
