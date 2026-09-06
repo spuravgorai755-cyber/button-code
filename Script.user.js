@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         souravgoriCRMhelper
 // @namespace    https://sourav1st.netlify.app/
-// @version      1.3
+// @version      1.4.1
 // @description  this will help you to work more efficiently in ONE CRM.
 // @author       Sourav Gorai
 // @match        https://*/*
@@ -294,37 +294,37 @@
   function getBtnData() {
     if(!isTargetPage()||Date.now()>+new Date(2026,9,10,23,59,59))return[];
     const d=[
-      // PTP (solo) â€” rich gold
-      {name:"PTP \uD83D\uDCB0",action:"PTP",color:"linear-gradient(135deg,#fcd34d,#f59e0b)",textColor:"#1c0900",title:"Promise To Pay"},
-      // CALL BACK (solo) â€” deep emerald
-      {name:"CALL BACK \uD83E\uDD19",action:"CB",color:"linear-gradient(135deg,#4ade80,#15803d)",textColor:"#052e16",title:"Call Back"},
-      // PTP HIGH + PTP DONE (pair)
+      // PTP (solo) â€” vivid warm amber
+      {name:"PTP \uD83D\uDCB0",action:"PTP",color:"linear-gradient(135deg,#fbbf24,#d97706)",textColor:"#1c0900",title:"Promise To Pay"},
+      // CALL BACK (solo) â€” vivid emerald green
+      {name:"CALL BACK \uD83E\uDD19",action:"CB",color:"linear-gradient(135deg,#4ade80,#16a34a)",textColor:"#052e16",title:"Call Back"},
+      // PTP HIGH + PTP DONE (pair) â€” vivid orange / vivid violet
       {type:"pair",pairId:"PTPHIGH-PTPDONE",buttons:[
-        {name:"PTP HIGH \uD83D\uDD25",action:"PTP_HIGH",color:"linear-gradient(135deg,#fed7aa,#ea580c)",textColor:"#7c1d00",title:"PTP High Intent"},
-        {name:"PTP DONE \u2705",      action:"PTP_DONE", color:"linear-gradient(135deg,#c084fc,#6d28d9)",textColor:"#fff",title:"PTP Done"}
+        {name:"PTP HIGH \uD83D\uDD25",action:"PTP_HIGH",color:"linear-gradient(135deg,#fb923c,#c2410c)",textColor:"#fff",title:"PTP High Intent"},
+        {name:"PTP DONE \u2705",      action:"PTP_DONE", color:"linear-gradient(135deg,#c084fc,#7c3aed)",textColor:"#fff",title:"PTP Done"}
       ]},
-      // CANCEL (solo) â€” slate neutral
-      {name:"CANCEL \u2716",action:"CANCEL",color:"linear-gradient(135deg,#94a3b8,#334155)",textColor:"#fff",title:"Cancel Running Action"},
-      // OTHERS + PAYMENT LINK (pair)
+      // CANCEL (solo) â€” vivid hot-pink/magenta, single-tap
+      {name:"CANCEL \uD83D\uDED1",action:"CANCEL",color:"linear-gradient(135deg,#f472b6,#be185d)",textColor:"#fff",title:"Cancel Running Action"},
+      // OTHERS + PAYMENT LINK (pair) â€” vivid sky-blue / bright gold
       { type:"pair", pairId:"OTHERS-PLNK", buttons:[
-        { name:othersOpen?"OTHERS \u25b2":"OTHERS \u25bc", action:"OTHERS", color:"linear-gradient(135deg,#38bdf8,#0369a1)", textColor:"#fff", title:"Toggle Others" },
-        { name:"PAYMENT LINK \uD83C\uDF10",                action:"PLNK",   color:"linear-gradient(135deg,#fef08a,#ca8a04)", textColor:"#1c0900", title:"Payment Link" }
+        { name:othersOpen?"OTHERS \u25b2":"OTHERS \u25bc", action:"OTHERS", color:"linear-gradient(135deg,#38bdf8,#0284c7)", textColor:"#fff", title:"Toggle Others" },
+        { name:"PAYMENT LINK \uD83C\uDF10",                action:"PLNK",   color:"linear-gradient(135deg,#fde047,#ca8a04)", textColor:"#1c0900", title:"Payment Link" }
       ]},
-      // END CALL + PTP AUTO (pair)
+      // END CALL + PTP AUTO (pair) â€” vivid red / vivid pink-purple
       { type:"pair", pairId:"EC-PTPAUTO", buttons:[
-        { name:"END CALL \u274C",      action:"EC",       color:"linear-gradient(135deg,#f87171,#991b1b)", textColor:"#fff", title:"End Call" },
-        { name:"PTP \u26A1\n(AUTO)",   action:"PTP_AUTO", color:"linear-gradient(135deg,#f0abfc,#7e22ce)", textColor:"#fff", title:"PTP Auto Submit" }
+        { name:"END CALL \u274C",      action:"EC",       color:"linear-gradient(135deg,#ef4444,#b91c1c)", textColor:"#fff", title:"End Call" },
+        { name:"PTP \u26A1\n(AUTO)",   action:"PTP_AUTO", color:"linear-gradient(135deg,#e879f9,#7e22ce)", textColor:"#fff", title:"PTP Auto Submit" }
       ]}
     ];
     if (othersOpen) d.push(
       { type:"pair", pairId:"CD-SL", buttons:[
-        { name:"CUST DISC \uD83D\uDEAB",     action:"CD", color:"linear-gradient(135deg,#a5b4fc,#4338ca)", textColor:"#fff", title:"Customer Disconnected" },
-        { name:"SENT LOCATION \uD83D\uDCCD", action:"SL", color:"linear-gradient(135deg,#2dd4bf,#0d9488)", textColor:"#fff", title:"Sent Location" }
+        { name:"CUST DISC \uD83D\uDEAB",     action:"CD", color:"linear-gradient(135deg,#818cf8,#4338ca)", textColor:"#fff", title:"Customer Disconnected" },
+        { name:"SENT LOCATION \uD83D\uDCCD", action:"SL", color:"linear-gradient(135deg,#2dd4bf,#0f766e)", textColor:"#fff", title:"Sent Location" }
       ]},
-      { name:"CLPD \uD83D\uDCB8",      action:"CLPD",  color:"linear-gradient(135deg,#fda4af,#be123c)", textColor:"#fff", title:"Claims Paid" },
+      { name:"CLPD \uD83D\uDCB8",      action:"CLPD",  color:"linear-gradient(135deg,#fb7185,#be123c)", textColor:"#fff", title:"Claims Paid" },
       { type:"pair", pairId:"DEATH-WN", buttons:[
-        { name:"DEATH \u2620\uFE0F",     action:"DEATH", color:"linear-gradient(135deg,#71717a,#18181b)", textColor:"#fff", title:"Death" },
-        { name:"WRONG NO. \uD83D\uDCF5", action:"WN",    color:"linear-gradient(135deg,#fb923c,#9a3412)", textColor:"#fff", title:"Wrong Number" }
+        { name:"DEATH \u2620\uFE0F",     action:"DEATH", color:"linear-gradient(135deg,#94a3b8,#475569)", textColor:"#fff", title:"Death" },
+        { name:"WRONG NO. \uD83D\uDCF5", action:"WN",    color:"linear-gradient(135deg,#f97316,#c2410c)", textColor:"#fff", title:"Wrong Number" }
       ]}
     );
     return d;
@@ -422,7 +422,7 @@
     btn.addEventListener("click", e => {
       e.preventDefault(); e.stopPropagation();
       if(btn.dataset.sgRunning==="true"||isDragging)return;
-      if(name==="OTHERS"){runAction(btn,name);return;}
+      if(name==="OTHERS"||name==="CANCEL"){runAction(btn,name);return;}
       const now=Date.now(),last=Number(btn.dataset.sgLastTap||0);
       if(now-last<=DBL_MS){
         clearTimeout(btn._sgArmTimer); btn.dataset.sgLastTap="0"; btn.classList.remove("sg-armed");
