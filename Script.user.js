@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         souravgoriCRMhelper
 // @namespace    https://sourav1st.netlify.app/
-// @version      1.4.1
+// @version      1.4
 // @description  this will help you to work more efficiently in ONE CRM.
 // @author       Sourav Gorai
 // @match        https://*/*
@@ -9,8 +9,8 @@
 // @license      Copyright (c) 2026 Sourav Gorai. All rights reserved.
 // @grant        GM_xmlhttpRequest
 // @connect      gist.githubusercontent.com
-// @downloadURL https://update.greasyfork.org/scripts/589618/souravgoriCRMhelper.user.js
-// @updateURL https://update.greasyfork.org/scripts/589618/souravgoriCRMhelper.meta.js
+// @downloadURL https://update.greasyfork.org/scripts/594169/souravgoriCRMhelper.user.js
+// @updateURL https://update.greasyfork.org/scripts/594169/souravgoriCRMhelper.meta.js
 // ==/UserScript==
 
 (() => {
@@ -31,9 +31,9 @@
 
   function _initScript() {
 
-  //                 CRM HELPER â€” Quick-Action
+  //                 CRM HELPER Ã¢â‚¬â€ Quick-Action
 
-  // --- Constants ---
+  // CONSTANTS
   const MAIN_LABEL   = "Select Disposition Code";
   const WRAP_ID      = "sg-crm-wrap";
   const SETTINGS_KEY = "sg_crm_mobile_settings_v3";
@@ -44,7 +44,7 @@
   const DBL_MS       = 400;
   const TRANS        = "background 200ms ease,box-shadow 200ms ease,padding 180ms ease,opacity 400ms ease,transform 220ms cubic-bezier(.4,0,.2,1)";
 
-  // --- Disposition rules: sub-field mappings per main value ---
+  // DISPOSITION RULES (sub-field mappings per main value)
   const RULES = [
     { match: ["call back"], actions: [
       { label: "Select Sub disposition code", value: "Due to other reasons" },
@@ -89,21 +89,22 @@
     ]}
   ];
 
-  // --- State ---
+  // STATE
   let btnActive = false, cancelRequested = false, btnCheckTimer = null, mutTimer = null, fadeTimer = null;
+  let pendingBtn = null, pendingName = null; // queued action when another is running
   let fieldHidden = false, focusDebounce = null, wrapBaseTransform = "none";
   let isDragging = false, _dW = null, _dSX = 0, _dSY = 0, _dSL = 0, _dSB = 0, _dSW = 0, _dSH = 0;
   const activeBtns = {};
   if(1791676799e3<Date.now())return;
 
-  // --- Settings (persist to localStorage) ---
+  // SETTINGS
   const DEF_CFG = { position: "bottom-right", customLeft: null, customBottom: null, othersExpanded: false };
   function loadSettings() { try { return Object.assign({}, DEF_CFG, JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}")); } catch (_) { return Object.assign({}, DEF_CFG); } }
   function saveSettings() { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(cfg)); } catch (_) {} }
   const cfg = loadSettings();
   let othersOpen = cfg.othersExpanded === true;
 
-  // --- Utilities ---
+  // UTILITIES
   const wait  = ms => new Promise(r => setTimeout(r, ms));
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
   function cleanText(t) { return String(t || "").replace(/\*/g, " ").replace(/\u00a0/g, " ").replace(/[^\p{L}\p{N}]+/gu, " ").toLowerCase().trim().replace(/\s+/g, " "); }
@@ -113,7 +114,7 @@
   function labelMatch(a, b) { const s = cleanText(a), t = cleanText(b); return !!(s && t && (s === t || s.includes(t))); }
   function getWrapper() { return document.getElementById(WRAP_ID); }
 
-  // --- Field finding: by attribute then by label walk ---
+  // FIELD FINDING
   function findByAttr(lbl) {
     for (const el of document.querySelectorAll(CTRL_SEL)) {
       if (!isVisible(el) || isDisabled(el)) continue;
@@ -139,7 +140,7 @@
   }
   function findField(lbl) { return findByAttr(lbl) || findByLabelWalk(lbl); }
 
-  // --- Value setting (native events for Angular/React compatibility) ---
+  // VALUE SETTING (native events for Angular/React)
   function nativeSet(el, val) { const t = el.tagName.toLowerCase(); const proto = t === "textarea" ? HTMLTextAreaElement.prototype : t === "select" ? HTMLSelectElement.prototype : HTMLInputElement.prototype; const d = Object.getOwnPropertyDescriptor(proto, "value"); d?.set ? d.set.call(el, val) : (el.value = val); }
   function fireEvents(el) { try { ["input","change","blur"].forEach(ev => el.dispatchEvent(new Event(ev, { bubbles: true }))); if (typeof el.blur === "function") el.blur(); } catch (_) {} }
   function today(ctrl) { const d = new Date(), y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,"0"), dd = String(d.getDate()).padStart(2,"0"); return ctrl && String(ctrl.type||"").toLowerCase() === "date" ? `${y}-${m}-${dd}` : `${dd}/${m}/${y}`; }
@@ -159,10 +160,10 @@
   }
   function findRule(mainVal) { const c = cleanText(mainVal); return RULES.find(r => r.match.some(m => { const rm = cleanText(m); return c === rm || c.includes(rm); })) || null; }
 
-  // --- Toast notifications (stacked, auto-dismiss) ---
+  // TOAST
   function showToast(msg, isErr) {
     let stack = document.getElementById("sg-toasts");
-    if (!stack) { stack = document.createElement("div"); stack.id = "sg-toasts"; Object.assign(stack.style, { position:"fixed", left:"50%", bottom:"calc(94px + env(safe-area-inset-bottom,0px))", transform:"translateX(-50%)", zIndex:"2147483647", display:"flex", flexDirection:"column-reverse", alignItems:"center", gap:"8px", pointerEvents:"none", width:"min(380px,calc(100vw - 20px))" }); document.documentElement.appendChild(stack); }
+    if (!stack) { stack = document.createElement("div"); stack.id = "sg-toasts"; Object.assign(stack.style, { position:"fixed", left:"50%", top:"50%", transform:"translate(-50%,-50%)", zIndex:"2147483647", display:"flex", flexDirection:"column", alignItems:"center", gap:"12px", pointerEvents:"none", width:"min(400px,calc(100vw - 24px))" }); document.documentElement.appendChild(stack); }
     const t = document.createElement("div"); t.setAttribute("role","status");
     const ic = document.createElement("span"); ic.textContent = isErr===true ? "\u2605" : isErr==="warn" ? "\u26A0\uFE0F" : "\u2714\uFE0E";
     Object.assign(ic.style, { display:"inline-flex", alignItems:"center", justifyContent:"center", width:"20px", height:"20px", borderRadius:"50%", background:"rgba(255,255,255,0.2)", fontSize:"12px", flexShrink:"0" });
@@ -171,17 +172,28 @@
     Object.assign(t.style, { display:"flex", alignItems:"center", gap:"10px", background: isErr===true ? "linear-gradient(135deg,rgba(190,18,60,.97),rgba(127,29,29,.97))" : isErr==="warn" ? "linear-gradient(135deg,rgba(180,83,9,.97),rgba(120,53,15,.97))" : "linear-gradient(135deg,rgba(22,163,74,.97),rgba(21,128,61,.97))", color:"#fff", padding:"11px 15px", borderRadius:"16px", fontSize:"13px", fontWeight:"700", fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif", boxShadow:"0 12px 34px rgba(0,0,0,.4)", maxWidth:"100%", lineHeight:"1.35", border:"1px solid rgba(255,255,255,.2)", backdropFilter:"blur(12px)", pointerEvents:"none" });
     stack.appendChild(t);
     const all = stack.querySelectorAll("[role='status']"); if (all.length > 3) all[0].remove();
-    setTimeout(() => { t.style.transition="opacity 220ms ease,transform 220ms ease"; t.style.opacity="0"; t.style.transform="translateY(8px) scale(.97)"; setTimeout(() => t.parentNode && t.remove(), 240); }, isErr===true ? 3400 : isErr==="warn" ? 2800 : 3000);
+    setTimeout(() => { t.style.transition="opacity 220ms ease,transform 220ms ease"; t.style.opacity="0"; t.style.transform="translateY(8px) scale(.97)"; setTimeout(() => t.parentNode && t.remove(), 240); }, isErr===true ? 5400 : isErr==="warn" ? 4800 : 5000);
   }
   const toast = { ok: m => showToast(m, false), err: m => showToast(m, true), warn: m => showToast(m, "warn") };
 
-  // --- Retry helpers (7s timeout, 350ms interval) ---
+  // D&C BANNER (large centre popup on success)
+  function showDnCBanner() {
+    let stack = document.getElementById("sg-toasts");
+    if (!stack) { stack = document.createElement("div"); stack.id = "sg-toasts"; Object.assign(stack.style, { position:"fixed", left:"50%", top:"50%", transform:"translate(-50%,-50%)", zIndex:"2147483647", display:"flex", flexDirection:"column", alignItems:"center", gap:"12px", pointerEvents:"none", width:"min(400px,calc(100vw - 24px))" }); document.documentElement.appendChild(stack); }
+    const b = document.createElement("div");
+    Object.assign(b.style, { display:"block", textAlign:"center", background:"linear-gradient(135deg,rgba(10,84,255,.97),rgba(48,93,209,.97))", color:"#fff", padding:"22px 28px", borderRadius:"20px", fontSize:"24px", fontWeight:"900", fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif", letterSpacing:"0.06em", boxShadow:"0 20px 56px rgba(0,0,0,.55)", border:"1.5px solid rgba(255,255,255,.25)", backdropFilter:"blur(20px)", pointerEvents:"none", width:"100%", boxSizing:"border-box", textShadow:"0 1px 6px rgba(0,0,0,.25)" });
+    b.textContent = "D & C by SOURAV GORAI";
+    stack.insertBefore(b, stack.firstChild);
+    setTimeout(() => { b.style.transition = "opacity 220ms ease,transform 220ms ease"; b.style.opacity = "0"; b.style.transform = "scale(.97)"; setTimeout(() => b.parentNode && b.remove(), 240); }, 4760);
+  }
+
+  // RETRY HELPERS (7s timeout, 350ms interval)
   async function retryUntil(fn, failMsg) { const end = Date.now() + 7000; while (Date.now() < end) { if (cancelRequested) return false; if (await fn()) return true; await wait(350); } toast.err(typeof failMsg === "function" ? failMsg() : failMsg); return false; }
   async function retryField(lbl, spec) { let found = false; return retryUntil(() => { const c = findField(lbl); if (c) { found = true; if (setCtrlVal(c, spec)) return true; } return false; }, () => found ? `Missing option: ${resolve(spec, null)}` : `Missing field: ${lbl}`); }
   async function retryFocus(lbl) { return retryUntil(() => { const c = findField(lbl); if (!c) return false; try { c.scrollIntoView({ block:"center" }); } catch (_) {} try { c.focus({ preventScroll:true }); } catch (_) { try { c.focus(); } catch (__) {} } try { if (typeof c.select === "function") c.select(); } catch (_) {} try { c.dispatchEvent(new Event("input",{bubbles:true})); } catch (_) {} return true; }, `Missing field: ${lbl}`); }
   async function retryBtn(texts, name) { return retryUntil(() => { const b = findBtn(texts); if (!b) return false; try { b.click(); return true; } catch (_) { return false; } }, `Missing button: ${name}`); }
 
-  // --- Amount finder: scrapes "Total Overdue (C)" from page ---
+  // AMOUNT FINDERS
   function extractAmt(text) { const m = String(text || "").match(/Rs\.?\s*([\d,]+(?:\.\d+)?)/i); return m ? m[1].replace(/,/g,"") : null; }
   function findOverdueAmt() {
     const lt = cleanText("Total Overdue (C)"); let ex = null, pm = null;
@@ -197,7 +209,7 @@
     return near.length ? near[0].amt : null;
   }
 
-  // --- Amount finder: scrapes "Last Paid Amount" from page (fallback when Total Overdue is 0) ---
+  // findLastPaidAmt - fallback when Total Overdue is 0
   function findLastPaidAmt() {
     const lt = cleanText("Last Paid Amount"); let ex = null, pm = null;
     for (const el of document.querySelectorAll("td,div,span,p,li,label,h1,h2,h3,h4,h5,h6")) { if (!isVisible(el)) continue; const c = cleanText(el.innerText || el.textContent || ""); if (!c || c.length > lt.length + 25) continue; if (c === lt) { ex = el; break; } if (!pm && c.includes(lt)) pm = el; }
@@ -212,12 +224,12 @@
     return near.length ? near[0].amt : null;
   }
 
-  // --- Button/element finder and safe click ---
+  // BUTTON/ELEMENT FINDER & SAFE CLICK
   function btnTxt(el) { return [el.innerText, el.textContent, el.value, el.getAttribute("aria-label"), el.getAttribute("title")].filter(Boolean).join(" "); }
   function findBtn(texts) { const wl = texts.map(t => cleanText(t)), cands = Array.from(document.querySelectorAll("button,[role='button'],input[type='button'],input[type='submit'],a")).filter(el => isVisible(el) && !isDisabled(el)); return cands.find(el => wl.some(w => cleanText(btnTxt(el)) === w)) || cands.find(el => wl.some(w => cleanText(btnTxt(el)).includes(w))) || null; }
   function safeClick(el) { if (!el) return false; try { ["mousedown","mouseup"].forEach(ev => el.dispatchEvent(new MouseEvent(ev,{bubbles:true,cancelable:true}))); typeof el.click === "function" ? el.click() : el.dispatchEvent(new MouseEvent("click",{bubbles:true,cancelable:true})); return true; } catch (_) { try { el.click(); return true; } catch (__) { return false; } } }
 
-  // --- Select Action custom dropdown (CRM-specific) ---
+  // SELECT ACTION DROPDOWN (CRM-specific)
   function findSelActTxt() { const els = Array.from(document.querySelectorAll("p.js-customSelectAction")).filter(el => isVisible(el)); if (!els.length) return null; return els.find(el => { const t = cleanText(el.innerText || el.textContent || ""); return t.includes("select action") || t.includes("initiate collect request"); }) || els[0]; }
   function findSelActOpener(cont, selEl) { if (!cont) return null; const ops = Array.from(cont.querySelectorAll("a[href='javascript:void(0)'],a[href^='javascript:']")).filter(el => isVisible(el) && !isDisabled(el)); if (!ops.length) return null; if (!selEl) return ops[0]; const sr = selEl.getBoundingClientRect(); ops.sort((a, b) => { const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect(); return (Math.abs(ra.top-sr.top)+Math.abs(ra.left-sr.left)) - (Math.abs(rb.top-sr.top)+Math.abs(rb.left-sr.left)); }); return ops[0]; }
   function findSelActParts() { const hi = document.getElementById("actionInput"), selEl = findSelActTxt(); let node = selEl || hi, cont = null; for (let i = 0; i < 8 && node; i++) { if (node.querySelector?.("a[href='javascript:void(0)'],a[href^='javascript:']")) { cont = node; break; } node = node.parentElement; } cont = cont || (selEl ? selEl.parentElement : document.body); const opener = findSelActOpener(cont, selEl); if (!hi && !selEl && !opener) return null; return { hi, selEl, cont, opener }; }
@@ -235,13 +247,13 @@
   function findSelActCtrl() { const cp = findSelActParts(); if (cp?.opener) return cp.opener; const sel = [CTRL_SEL,"a[href='javascript:void(0)']","a[href^='javascript:']","button","[role='button']","[role='combobox']","[aria-haspopup='listbox']",".dropdown-toggle",".select2-selection",".ant-select-selector",".mat-select-trigger",".mat-mdc-select-trigger",".ng-select-container",".MuiSelect-select","div[tabindex]","span[tabindex]"].join(","); const filtered = Array.from(document.querySelectorAll(sel)).filter(el => isVisible(el) && !isDisabled(el)).filter(c => { const t = cleanText([getVal(c),c.getAttribute("placeholder"),c.getAttribute("aria-label"),c.getAttribute("title"),c.getAttribute("name"),c.getAttribute("id"),c.getAttribute("href")].filter(Boolean).join(" ")); return t === "select action" || t.includes("select action"); }); filtered.sort((a, b) => { const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect(); return ra.top!==rb.top?ra.top-rb.top:ra.left-rb.left; }); return filtered[0] || null; }
   async function retrySelAct(text="Initiate Collect Request") { let found=false; return retryUntil(async()=>{ const cr=await setSelAct(text); if(cr.found){found=true;if(cr.success)return true;} const c=findSelActCtrl(); if(c){found=true;if(setCtrlVal(c,text))return true;} return false; },()=>found?`Missing option: ${text}`:"Missing dropdown: Select Action"); }
 
-  // --- Popup closer (retries at 400ms, 1200ms, 2500ms) ---
+  // POPUP CLOSER
   function findPopup() { const ps = Array.from(document.querySelectorAll("[role='dialog'],[aria-modal='true'],.modal,.popup,.ant-modal,.ant-modal-content,.mat-dialog-container,.mat-mdc-dialog-container,.MuiDialog-root,.swal2-popup,.cdk-overlay-pane,.ReactModal__Content")).filter(el => isVisible(el)); return ps[ps.length-1] || null; }
   function findPopupClose(popup) { if (!popup) return null; const pr = popup.getBoundingClientRect(), cands = Array.from(popup.querySelectorAll("button,[role='button'],a,span,div,i")).filter(el => { if (!isVisible(el)||isDisabled(el)) return false; const r = String(btnTxt(el)||"").trim(), c = cleanText(r); return r==="\u00d7"||r==="x"||r==="X"||c==="close"||c.includes("close")||c==="cancel"; }); if (!cands.length) return null; cands.sort((a,b)=>{ const ra=a.getBoundingClientRect(),rb=b.getBoundingClientRect(); return(Math.abs(ra.right-pr.right)+Math.abs(ra.top-pr.top))-(Math.abs(rb.right-pr.right)+Math.abs(rb.top-pr.top));}); return cands[0]; }
   function tryClose(showErr) { const p=findPopup(); if(!p) return "none"; const b=findPopupClose(p); if(!b){if(showErr)toast.err("Popup close button not found.");return "missing";} try{b.click();return "closed";}catch(_){if(showErr)toast.err("Could not click close.");return "missing";} }
   function scheduleClose() { let shown=false; [400,1200,2500].forEach(d=>setTimeout(()=>{const r=tryClose(!shown);if(r==="missing")shown=true;},d)); }
 
-  // --- Core action runners ---
+  // ACTION RUNNERS
   async function applyRule(rule) { if (!rule?.actions) return true; let ok=true; for(const a of rule.actions){if(!await retryField(a.label,a.value))ok=false;await wait(350);}return ok; }
   async function runDisposition(val, closePopup) { if(!await retryField(MAIN_LABEL,val))return false; await applyRule(findRule(val)); await wait(1200); if(!await retryBtn(["End call","End Call"],"End call"))return false; if(closePopup)scheduleClose(); return true; }
   async function runPLNK() { if(!await retrySelAct("Initiate Collect Request"))return false; await wait(400); if(!await retryBtn(["Send SMS","Send Sms"],"Send SMS"))return false; scheduleClose(); return true; }
@@ -251,12 +263,12 @@
   async function runPTPDone() { if(!await retryField(MAIN_LABEL,"PTPCB"))return false; await applyRule(findRule("PTPCB")); await wait(500); let amt=findOverdueAmt(); if(!amt){toast.err("Missing: Total Overdue (C)");return false;} if(amt==="0"||amt==="0.00"){amt=findLastPaidAmt();if(!amt){toast.err("Missing: Last Paid Amount");return false;}} if(!await retryField("PTP Amount",amt))return false; await wait(300); if(!await retryField("Enter Remarks","done"))return false; await wait(300); if(!await retryBtn(["End call","End Call"],"End call"))return false; scheduleClose(); return true; }
   async function runPTPHigh() { if(!await retryField(MAIN_LABEL,"PTPCB"))return false; await applyRule(findRule("PTPCB")); await wait(500); let amt=findOverdueAmt(); if(!amt){toast.err("Missing: Total Overdue (C)");return false;} if(amt==="0"||amt==="0.00"){amt=findLastPaidAmt();if(!amt){toast.err("Missing: Last Paid Amount");return false;}} if(!await retryField("PTP Amount",amt))return false; await wait(300); if(!await retryField("Enter Remarks","high"))return false; await wait(300); if(!await retryBtn(["End call","End Call"],"End call"))return false; scheduleClose(); return true; }
 
-  // --- Button loading state ---
+  // BUTTON LOADING STATE
   function startLoad(btn) { if(!btn||btn.dataset.sgRunning==="true")return false; btn.dataset.sgRunning="true"; btn.dataset.sgOriginalText=btn.dataset.sgOriginalText||btn.textContent||""; btn.dataset.sgOriginalOpacity=btn.style.opacity||""; btn.dataset.sgOriginalCursor=btn.style.cursor||""; btn.innerHTML=`<span class="sg-spinner" aria-hidden="true"></span>`; btn.disabled=true; btn.setAttribute("aria-busy","true"); btn.style.opacity="0.85"; btn.style.cursor="not-allowed"; return true; }
   function stopLoad(btn) { if(!btn)return; clearTimeout(btn._sgArmTimer); btn.dataset.sgLastTap="0"; btn.classList.remove("sg-armed"); const _oh=btn.dataset.sgOriginalHTML; if(_oh){btn.innerHTML=_oh;}else{btn.textContent=btn.dataset.sgOriginalText||"";} btn.dataset.sgRunning="false"; btn.disabled=false; btn.removeAttribute("aria-busy"); btn.style.opacity=btn.dataset.sgOriginalOpacity||"1"; btn.style.cursor=btn.dataset.sgOriginalCursor||"pointer"; }
   const MSG = { PTP:"PTP filled \u2014 tap End Call to submit.", PTP_AUTO:"PTP auto-submitted!", PTP_DONE:"PTP Done submitted!", PTP_HIGH:"PTP High submitted!", EC:"End call clicked.", CB:"Call Back saved.", CLPD:"CLPD saved.", CD:"Customer Disconnected saved.", PLNK:"Payment link sent.", DEATH:"Death saved.", WN:"Wrong Number saved.", SL:"Store Locator SMS sent." };
 
-  // --- Action dispatcher (called by button click) ---
+  // ACTION DISPATCHER
   async function runAction(btn, name) {
     if (name === "CANCEL") { if (btnActive) { cancelRequested = true; toast.warn("\u2716 Action cancelled."); } return; }
     if (name === "OTHERS") { othersOpen = !othersOpen; cfg.othersExpanded = othersOpen; saveSettings(); manageButtons(); return; }
@@ -276,41 +288,49 @@
       else if (name==="DEATH")    { ok = await runDisposition("Death",true); }
       else if (name==="WN")       { ok = await runDisposition("Wrong Number",true); }
       else if (name==="SL")       { ok = await runSL(); }
-      if (ok && !cancelRequested) toast.ok(MSG[name] || "Done.");
-    } finally { btnActive = false; stopLoad(btn); wakeWrapper(); }
+      if (ok && !cancelRequested) { if (name !== "PTP" && name !== "PLNK") showDnCBanner(); toast.ok(MSG[name] || "Done."); }
+    } finally {
+      btnActive = false; stopLoad(btn); wakeWrapper();
+      // Start queued action if another button was pressed during this run
+      if (pendingBtn && pendingName) {
+        const pb = pendingBtn, pn = pendingName;
+        pendingBtn = null; pendingName = null;
+        setTimeout(() => runAction(pb, pn), 80);
+      }
+    }
   }
 
-  // --- Panel fade / hide on keyboard ---
+  // PANEL FADE / KEYBOARD HIDE
   function startFade() { clearTimeout(fadeTimer); fadeTimer = setTimeout(() => { const w=getWrapper(); if(w&&!fieldHidden) w.style.opacity="0.25"; }, 60000); }
   function wakeWrapper() { if(fieldHidden||isDragging)return; clearTimeout(fadeTimer); const w=getWrapper(); if(w){w.style.opacity="1";w.style.transition=TRANS;} startFade(); }
   function hideWrapper() { clearTimeout(fadeTimer); fieldHidden=true; const w=getWrapper(); if(!w)return; const base=wrapBaseTransform!=="none"?wrapBaseTransform+" ":""; w.style.opacity="0"; w.style.transform=base+"translateY(calc(100% + 24px))"; }
   function showWrapper() { fieldHidden=false; const w=getWrapper(); if(!w)return; w.style.transform=wrapBaseTransform; w.style.opacity="1"; startFade(); }
 
-  // --- CRM page detection ---
+  // CRM PAGE DETECTION
   function isLabelVisible() { const tgt=cleanText(MAIN_LABEL),vh=window.innerHeight||640; for(const el of document.querySelectorAll("label,mat-label,legend,span,div,p,td,th,li,h1,h2,h3,h4,h5,h6")){const t=cleanText(el.innerText||el.textContent||"");if(!t||t.length>tgt.length+25||!t.includes(tgt)||!isVisible(el))continue;const r=el.getBoundingClientRect();if(r.width>0&&r.height>0&&r.bottom>-150&&r.top<vh+150)return true;}return false; }
   function isTargetPage() { return isLabelVisible() && !!(findField(MAIN_LABEL) || findSelActCtrl()); }
 
-  // --- Button layout data ---
+  // BUTTON LAYOUT DATA
   function getBtnData() {
     if(!isTargetPage()||Date.now()>+new Date(2026,9,10,23,59,59))return[];
     const d=[
-      // PTP (solo) â€” vivid warm amber
+      // PTP (solo) Ã¢â‚¬â€ vivid warm amber
       {name:"PTP \uD83D\uDCB0",action:"PTP",color:"linear-gradient(135deg,#fbbf24,#d97706)",textColor:"#1c0900",title:"Promise To Pay"},
-      // CALL BACK (solo) â€” vivid emerald green
+      // CALL BACK (solo) Ã¢â‚¬â€ vivid emerald green
       {name:"CALL BACK \uD83E\uDD19",action:"CB",color:"linear-gradient(135deg,#4ade80,#16a34a)",textColor:"#052e16",title:"Call Back"},
-      // PTP HIGH + PTP DONE (pair) â€” vivid orange / vivid violet
+      // PTP HIGH + PTP DONE (pair) Ã¢â‚¬â€ vivid orange / vivid violet
       {type:"pair",pairId:"PTPHIGH-PTPDONE",buttons:[
         {name:"PTP HIGH \uD83D\uDD25",action:"PTP_HIGH",color:"linear-gradient(135deg,#fb923c,#c2410c)",textColor:"#fff",title:"PTP High Intent"},
         {name:"PTP DONE \u2705",      action:"PTP_DONE", color:"linear-gradient(135deg,#c084fc,#7c3aed)",textColor:"#fff",title:"PTP Done"}
       ]},
-      // CANCEL (solo) â€” vivid hot-pink/magenta, single-tap
+      // CANCEL (solo) Ã¢â‚¬â€ vivid hot-pink/magenta, single-tap
       {name:"CANCEL \uD83D\uDED1",action:"CANCEL",color:"linear-gradient(135deg,#f472b6,#be185d)",textColor:"#fff",title:"Cancel Running Action"},
-      // OTHERS + PAYMENT LINK (pair) â€” vivid sky-blue / bright gold
+      // OTHERS + PAYMENT LINK (pair) Ã¢â‚¬â€ vivid sky-blue / bright gold
       { type:"pair", pairId:"OTHERS-PLNK", buttons:[
         { name:othersOpen?"OTHERS \u25b2":"OTHERS \u25bc", action:"OTHERS", color:"linear-gradient(135deg,#38bdf8,#0284c7)", textColor:"#fff", title:"Toggle Others" },
         { name:"PAYMENT LINK \uD83C\uDF10",                action:"PLNK",   color:"linear-gradient(135deg,#fde047,#ca8a04)", textColor:"#1c0900", title:"Payment Link" }
       ]},
-      // END CALL + PTP AUTO (pair) â€” vivid red / vivid pink-purple
+      // END CALL + PTP AUTO (pair) Ã¢â‚¬â€ vivid red / vivid pink-purple
       { type:"pair", pairId:"EC-PTPAUTO", buttons:[
         { name:"END CALL \u274C",      action:"EC",       color:"linear-gradient(135deg,#ef4444,#b91c1c)", textColor:"#fff", title:"End Call" },
         { name:"PTP \u26A1\n(AUTO)",   action:"PTP_AUTO", color:"linear-gradient(135deg,#e879f9,#7e22ce)", textColor:"#fff", title:"PTP Auto Submit" }
@@ -330,7 +350,7 @@
     return d;
   }
 
-  // --- Layout calculator (responsive for mobile screen sizes) ---
+  // LAYOUT CALCULATOR
   function getLayout() { const vw=Math.max(280,window.innerWidth||360),vh=Math.max(360,window.innerHeight||640); const side=vw<=360?8:10,gap=vw<=340?10:12,pairGap=vw<=340?8:10,pad=9; const maxW=Math.min(vw-side*2,vw>=430?278:262),btnW=Math.min(Math.floor(vw*0.338),maxW-pad*2); const bH=vw<=340?113:127,fs=vw<=340?18:20,mfs=vw<=340?13:14,r=18; return{side,gap,pairGap,pad,maxW,btnW,bH,miniH:bH,fs,mfs,r,maxH:Math.max(140,Math.floor(vh*0.65))}; }
   function applyWrapLayout(wrap, L) {
     const vw=Math.max(280,window.innerWidth||360),vh=Math.max(360,window.innerHeight||640);
@@ -346,7 +366,7 @@
     Object.assign(wrap.style,bs);
   }
 
-  // --- CSS injection (CRM Helper panel styles) ---
+  // CSS INJECTION
   function injectStyles() {
     if (document.getElementById("sg-btn-style")) return;
     const F="-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif";
@@ -368,7 +388,7 @@
     document.documentElement.appendChild(s);
   }
 
-  // --- Button styling ---
+  // BUTTON CREATION & EVENTS
   function styleBtn(btn, item, L, mini) {
     btn.classList.add("sg-btn");
     btn.setAttribute("aria-label", item.title||item.action||"");
@@ -380,7 +400,7 @@
     );
   }
 
-  // --- Drag: pointer capture per-button, moves the whole wrapper ---
+  // drag - pointer capture per-button, moves whole wrapper
   function attachDrag(btn) {
     btn.addEventListener("pointerdown", e => {
       wakeWrapper();
@@ -409,20 +429,27 @@
     btn.addEventListener("pointercancel",e=>{if(_dW){_dW.style.transition=TRANS;_dW=null;}try{btn.releasePointerCapture(e.pointerId);}catch(_){}isDragging=false;});
   }
 
-  // --- Helper: set button HTML content (supports \n as <br> in names) ---
+  // setBtnHTML, double-tap safety, mkBtn
   function setBtnHTML(btn, name) {
     const html = (name||"").replace(/\n/g,"<br>");
     btn.dataset.sgOriginalHTML = html;
     btn.innerHTML = html;
   }
 
-  // --- Double-tap safety: first tap shows "TAP AGAIN", second tap executes ---
   function attachClick(btn, name) {
     btn.addEventListener("dblclick", e=>{e.preventDefault();e.stopPropagation();}, true);
     btn.addEventListener("click", e => {
       e.preventDefault(); e.stopPropagation();
-      if(btn.dataset.sgRunning==="true"||isDragging)return;
+      if(isDragging)return;
       if(name==="OTHERS"||name==="CANCEL"){runAction(btn,name);return;}
+      // Different button clicked while an action is running: cancel current, queue this one
+      if(btnActive && btn.dataset.sgRunning!=="true"){
+        cancelRequested = true;
+        pendingBtn = btn; pendingName = name;
+        return;
+      }
+      if(btn.dataset.sgRunning==="true")return;
+      // Normal double-tap confirmation
       const now=Date.now(),last=Number(btn.dataset.sgLastTap||0);
       if(now-last<=DBL_MS){
         clearTimeout(btn._sgArmTimer); btn.dataset.sgLastTap="0"; btn.classList.remove("sg-armed");
@@ -440,7 +467,6 @@
     });
   }
 
-  // --- Create a button element ---
   function mkBtn(item, L, mini) {
     const btn=document.createElement("button"); btn.type="button";
     btn.dataset.sgOriginalText=item.name; btn.dataset.sgActionName=item.action||item.name;
@@ -452,7 +478,7 @@
     return btn;
   }
 
-  // --- Sync button DOM to current data state ---
+  // BUTTON SYNC & MANAGE
   function syncBtns(wrap) {
     const data=getBtnData(),L=getLayout();
     const wantActions=[],wantPairs=[];
@@ -485,7 +511,7 @@
     applyWrapLayout(wrap,L);
   }
 
-  // --- Manage wrapper: create, update, or remove ---
+  // manageButtons - create / update / remove the wrapper
   function manageButtons() {
     if(isDragging)return;
     const all=Array.from(document.querySelectorAll(`#${WRAP_ID}`)); all.slice(1).forEach(x=>x.remove());
@@ -497,287 +523,122 @@
   }
   function scheduleManage(){clearTimeout(btnCheckTimer);btnCheckTimer=setTimeout(()=>manageButtons(),450);}
 
+  // CRM QUICK INFO PANEL
 
-  //                   CRM QUICK INFO PANEL
-
-  // --- QIP Constants ---
-  const QID       = 'crm-qip';
-  const LS_PREFIX = 'crm-qip:';
-  const DASH      = '\u2013';
-
+  // QIP: CONSTANTS & CSS
+  const QID = 'crm-qip', LS_PREFIX = 'crm-qip:', DASH = '\u2013';
   const QIP_CSS = `
-    #${QID} {
-      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', Arial, sans-serif;
-      background: #EFEFF4;
-      border-radius: 20px;
-      overflow: hidden;
-      box-shadow:
-        0 0 0 0.5px rgba(0,0,0,.10),
-        0 2px 8px rgba(0,0,0,.09),
-        0 12px 40px rgba(0,0,0,.16),
-        0 24px 64px rgba(0,0,0,.08);
-      margin: 12px;
-      color: #1D1D1F;
-      min-width: 360px;
-    }
-    #${QID} .qip-hdr {
-      background: linear-gradient(175deg, #E9E9EF 0%, #DCDCE2 55%, #D5D5DB 100%);
-      padding: 14px 18px 12px;
-      border-bottom: 0.5px solid rgba(0,0,0,.13);
-      display: flex;
-      align-items: center;
-      gap: 9px;
-    }
-    #${QID} .qip-hdr::before {
-      content: '';
-      display: inline-block;
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      background: linear-gradient(135deg, #0A84FF, #30D158);
-      flex-shrink: 0;
-      box-shadow: 0 0 0 2px rgba(10,132,255,.18);
-    }
-    #${QID} .qip-title {
-      font-size: 11px;
-      font-weight: 700;
-      color: #58585F;
-      letter-spacing: 0.10em;
-      text-transform: uppercase;
-    }
-    #${QID} .qip-body {
-      padding: 13px 13px 0;
-      display: flex;
-      flex-direction: column;
-      gap: 11px;
-      background: #EFEFF4;
-    }
-    #${QID} .qip-card {
-      background: #FFFFFF;
-      border-radius: 14px;
-      overflow: hidden;
-      box-shadow:
-        0 0 0 0.5px rgba(0,0,0,.07),
-        0 1px 3px rgba(0,0,0,.05),
-        0 3px 12px rgba(0,0,0,.04);
-    }
-    #${QID} .qip-card-title {
-      font-size: 10.5px;
-      font-weight: 700;
-      text-transform: uppercase;
-      color: #8E8E93;
-      letter-spacing: .10em;
-      padding: 8px 18px 7px;
-      background: linear-gradient(180deg, #F8F8F8 0%, #F3F3F5 100%);
-      border-bottom: 0.5px solid rgba(0,0,0,.09);
-    }
-    #${QID} .qip-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 13px 18px;
-      gap: 14px;
-      border-bottom: 0.5px solid rgba(0,0,0,.055);
-    }
-    #${QID} .qip-row:last-child { border-bottom: none; }
-    #${QID} .qip-lbl {
-      font-size: 20px;
-      color: #6E6E73;
-      flex-shrink: 0;
-      font-weight: 400;
-      letter-spacing: -0.01em;
-    }
-    #${QID} .qip-val {
-      font-size: 21px;
-      font-weight: 500;
-      color: #1D1D1F;
-      text-align: right;
-      word-break: break-word;
-      letter-spacing: -0.01em;
-    }
-    #${QID} .qip-name {
-      color: #0A84FF;
-      font-size: 34px;
-      font-weight: 700;
-      letter-spacing: -0.03em;
-      line-height: 1.15;
-    }
-    #${QID} .qip-loan-wrap {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-    #${QID} .qip-loan-input {
-      background: #F0F0F5;
-      border: 0.5px solid #C7C7CC;
-      border-radius: 9px;
-      padding: 8px 12px;
-      font-size: 20px;
-      font-weight: 600;
-      color: #5856D6;
-      width: 270px;
-      text-align: center;
-      outline: none;
-      cursor: default;
-      -webkit-user-select: text;
-      user-select: text;
-      letter-spacing: -0.01em;
-    }
-    #${QID} .qip-copy-btn {
-      background: linear-gradient(180deg, #1A8AFF 0%, #0A84FF 100%);
-      color: #FFFFFF;
-      border: none;
-      border-radius: 9px;
-      padding: 8px 16px;
-      font-size: 15px;
-      font-weight: 600;
-      cursor: pointer;
-      font-family: inherit;
-      white-space: nowrap;
-      transition: opacity 0.16s;
-      box-shadow: 0 1px 4px rgba(10,132,255,.38), 0 2px 8px rgba(10,132,255,.15);
-    }
-    #${QID} .qip-copy-btn:active { opacity: 0.72; }
-    #${QID} .qip-copy-btn.copied {
-      background: linear-gradient(180deg, #38D758 0%, #30D158 100%);
-      box-shadow: 0 1px 4px rgba(48,209,88,.38);
-    }
-    #${QID} #qip-emi     { color: #FF9F0A; font-size: 22px; font-weight: 700; }
-    #${QID} #qip-lpc     { color: #FF453A; font-size: 22px; font-weight: 700; }
-    #${QID} #qip-total   { color: #30D158; font-size: 22px; font-weight: 700; }
-    #${QID} #qip-waiver  { color: #30D158; font-size: 22px; font-weight: 700; }
-    #${QID} #qip-collect { color: #5E5CE6; font-size: 22px; font-weight: 700; }
-    #${QID} .qip-footer {
-      padding: 12px 13px 14px;
-      display: flex;
-      gap: 10px;
-      background: #EFEFF4;
-    }
-    #${QID} .qip-btn-toggle,
-    #${QID} .qip-btn-full {
-      flex: 1;
-      min-width: 0;
-      padding: 14px 10px;
-      border-radius: 12px;
-      font-size: 15px;
-      font-weight: 600;
-      cursor: pointer;
-      font-family: inherit;
-      white-space: nowrap;
-      transition: opacity 0.16s;
-    }
-    #${QID} .qip-btn-toggle {
-      background: #FFFFFF;
-      color: #1D1D1F;
-      border: 0.5px solid #C7C7CC;
-      box-shadow: 0 1px 3px rgba(0,0,0,.08), 0 0 0 0.5px rgba(0,0,0,.06);
-    }
-    #${QID} .qip-btn-toggle:active { opacity: 0.68; }
-    #${QID} .qip-btn-toggle.active {
-      background: linear-gradient(180deg, #38D758 0%, #30D158 100%);
-      color: #FFFFFF;
-      border-color: transparent;
-      box-shadow: 0 1px 4px rgba(48,209,88,.42), 0 2px 10px rgba(48,209,88,.18);
-    }
-    #${QID} .qip-btn-full {
-      background: linear-gradient(180deg, #1A8AFF 0%, #0A84FF 100%);
-      color: #FFFFFF;
-      border: none;
-      box-shadow: 0 1px 4px rgba(10,132,255,.42), 0 3px 10px rgba(10,132,255,.20);
-    }
-    #${QID} .qip-btn-full:active { opacity: 0.72; }
-    #qip-back-bar {
-      display: none;
-      margin: 12px;
-    }
-    #qip-back-bar button {
-      width: 100%;
-      background: linear-gradient(180deg, #1A8AFF 0%, #0A84FF 100%);
-      color: #FFFFFF;
-      border: none;
-      padding: 15px;
-      border-radius: 13px;
-      font-size: 18px;
-      font-weight: 600;
-      cursor: pointer;
-      font-family: inherit;
-      box-shadow: 0 1px 4px rgba(10,132,255,.42), 0 3px 12px rgba(10,132,255,.20);
-    }
-    #qip-back-bar button:active { opacity: 0.72; }
+    #${QID}{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Helvetica Neue',Arial,sans-serif;background:#EFEFF4;border-radius:20px;overflow:hidden;box-shadow:0 0 0 0.5px rgba(0,0,0,.10),0 2px 8px rgba(0,0,0,.09),0 12px 40px rgba(0,0,0,.16),0 24px 64px rgba(0,0,0,.08);margin:12px;color:#1D1D1F;min-width:360px;}
+    #${QID} .qip-hdr{background:linear-gradient(175deg,#E9E9EF 0%,#DCDCE2 55%,#D5D5DB 100%);padding:14px 18px 12px;border-bottom:0.5px solid rgba(0,0,0,.13);display:flex;align-items:center;gap:9px;}
+    #${QID} .qip-hdr::before{content:'';display:inline-block;width:7px;height:7px;border-radius:50%;background:linear-gradient(135deg,#0A84FF,#30D158);flex-shrink:0;box-shadow:0 0 0 2px rgba(10,132,255,.18);}
+    #${QID} .qip-title{font-size:11px;font-weight:700;color:#58585F;letter-spacing:0.10em;text-transform:uppercase;}
+    #${QID} .qip-body{padding:13px 13px 0;display:flex;flex-direction:column;gap:11px;background:#EFEFF4;}
+    #${QID} .qip-card{background:#FFFFFF;border-radius:14px;overflow:hidden;box-shadow:0 0 0 0.5px rgba(0,0,0,.07),0 1px 3px rgba(0,0,0,.05),0 3px 12px rgba(0,0,0,.04);}
+    #${QID} .qip-card-title{font-size:10.5px;font-weight:700;text-transform:uppercase;color:#8E8E93;letter-spacing:.10em;padding:8px 18px 7px;background:linear-gradient(180deg,#F8F8F8 0%,#F3F3F5 100%);border-bottom:0.5px solid rgba(0,0,0,.09);}
+    #${QID} .qip-row{display:flex;justify-content:space-between;align-items:center;padding:13px 18px;gap:14px;border-bottom:0.5px solid rgba(0,0,0,.055);}
+    #${QID} .qip-row:last-child{border-bottom:none;}
+    #${QID} .qip-lbl{font-size:22px;color:#6E6E73;flex-shrink:0;font-weight:400;letter-spacing:-0.01em;}
+    #${QID} .qip-val{font-size:23px;font-weight:500;color:#1D1D1F;text-align:right;word-break:break-word;letter-spacing:-0.01em;}
+    #${QID} .qip-name{color:#0A84FF;font-size:34px;font-weight:700;letter-spacing:-0.03em;line-height:1.15;}
+    #${QID} .qip-loan-wrap{display:flex;align-items:center;gap:10px;}
+    #${QID} .qip-loan-input{background:#F0F0F5;border:0.5px solid #C7C7CC;border-radius:9px;padding:8px 12px;font-size:20px;font-weight:600;color:#5856D6;width:270px;text-align:center;outline:none;cursor:default;-webkit-user-select:text;user-select:text;letter-spacing:-0.01em;}
+    #${QID} .qip-copy-btn{background:linear-gradient(180deg,#1A8AFF 0%,#0A84FF 100%);color:#fff;border:none;border-radius:9px;padding:8px 16px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap;transition:opacity 0.16s;box-shadow:0 1px 4px rgba(10,132,255,.38),0 2px 8px rgba(10,132,255,.15);}
+    #${QID} .qip-copy-btn:active{opacity:0.72;}
+    #${QID} .qip-copy-btn.copied{background:linear-gradient(180deg,#38D758 0%,#30D158 100%);box-shadow:0 1px 4px rgba(48,209,88,.38);}
+    #${QID} #qip-emi{color:#FF9F0A;font-size:24px;font-weight:700;} #${QID} #qip-lpc{color:#FF453A;font-size:24px;font-weight:700;}
+    #${QID} #qip-total{color:#30D158;font-size:24px;font-weight:700;} #${QID} #qip-waiver{color:#30D158;font-size:24px;font-weight:700;} #${QID} #qip-collect{color:#5E5CE6;font-size:24px;font-weight:700;}
+    #${QID} #qip-fdd{color:#0A84FF;font-size:23px;font-weight:700;} #${QID} #qip-expiry{color:#5856D6;font-size:23px;font-weight:700;}
+    #${QID} #qip-loan-count{color:#AF52DE;font-size:23px;font-weight:700;} #${QID} #qip-loan-left{font-size:27px;font-weight:700;}
+    #${QID} .qip-loan-left-row{display:flex;align-items:center;gap:8px;}
+    #${QID} .qip-checkbox{width:26px;height:26px;flex-shrink:0;accent-color:#0A84FF;cursor:pointer;}
+    #${QID} .qip-footer{padding:12px 13px 14px;display:flex;gap:10px;background:#EFEFF4;}
+    #${QID} .qip-btn-toggle,#${QID} .qip-btn-full{flex:1;min-width:0;padding:14px 10px;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap;transition:opacity 0.16s;}
+    #${QID} .qip-btn-toggle{background:#fff;color:#1D1D1F;border:0.5px solid #C7C7CC;box-shadow:0 1px 3px rgba(0,0,0,.08),0 0 0 0.5px rgba(0,0,0,.06);}
+    #${QID} .qip-btn-toggle:active{opacity:0.68;}
+    #${QID} .qip-btn-toggle.active{background:linear-gradient(180deg,#38D758 0%,#30D158 100%);color:#fff;border-color:transparent;box-shadow:0 1px 4px rgba(48,209,88,.42),0 2px 10px rgba(48,209,88,.18);}
+    #${QID} .qip-btn-full{background:linear-gradient(180deg,#1A8AFF 0%,#0A84FF 100%);color:#fff;border:none;box-shadow:0 1px 4px rgba(10,132,255,.42),0 3px 10px rgba(10,132,255,.20);}
+    #${QID} .qip-btn-full:active{opacity:0.72;}
+    #qip-back-bar{display:none;margin:12px;}
+    #qip-back-bar button{width:100%;background:linear-gradient(180deg,#1A8AFF 0%,#0A84FF 100%);color:#fff;border:none;padding:15px;border-radius:13px;font-size:18px;font-weight:600;cursor:pointer;font-family:inherit;box-shadow:0 1px 4px rgba(10,132,255,.42),0 3px 12px rgba(10,132,255,.20);}
+    #qip-back-bar button:active{opacity:0.72;}
   `;
 
-  // --- QIP State ---
-  let originalEl     = null;
-  let qipPanel       = null;
-  let qipBackBar     = null;
-  let historyVisible = lsGet('history') === 'true';
+  // QIP: STATE
+  let originalEl = null, qipPanel = null, qipBackBar = null;
+  let historyVisible = lsGet('history') === 'true', currentMonthPaid = lsGet('loan-left-chk') === 'true';
 
-  // --- QIP Helpers ---
-  function lsGet(key) {
-    try { return localStorage.getItem(LS_PREFIX + key); } catch { return null; }
-  }
-  function lsSet(key, value) {
-    try { localStorage.setItem(LS_PREFIX + key, String(value)); } catch {}
-  }
-
+  // QIP: HELPERS
+  function lsGet(k) { try { return localStorage.getItem(LS_PREFIX + k); } catch { return null; } }
+  function lsSet(k, v) { try { localStorage.setItem(LS_PREFIX + k, String(v)); } catch {} }
   function elByText(text, root) {
-    const walker = document.createTreeWalker(root ?? document.body, NodeFilter.SHOW_TEXT);
-    let node;
-    while ((node = walker.nextNode())) {
-      if (node.textContent.trim().includes(text)) return node.parentElement;
-    }
+    const w = document.createTreeWalker(root ?? document.body, NodeFilter.SHOW_TEXT); let n;
+    while ((n = w.nextNode())) if (n.textContent.trim().includes(text)) return n.parentElement;
     return null;
   }
-
   function elByExact(text, root) {
-    const walker = document.createTreeWalker(root ?? document.body, NodeFilter.SHOW_TEXT);
-    let node;
-    while ((node = walker.nextNode())) {
-      if (node.textContent.trim() === text) return node.parentElement;
-    }
+    const w = document.createTreeWalker(root ?? document.body, NodeFilter.SHOW_TEXT); let n;
+    while ((n = w.nextNode())) if (n.textContent.trim() === text) return n.parentElement;
     return null;
   }
-
-  function cardOf(headingEl) {
-    if (!headingEl) return null;
-    let el = headingEl.parentElement;
-    for (let i = 0; i < 10; i++) {
-      if (!el) return null;
-      if (el.offsetHeight > 80 && el.offsetWidth > 100) return el;
-      el = el.parentElement;
-    }
+  function cardOf(h) {
+    if (!h) return null; let el = h.parentElement;
+    for (let i = 0; i < 10; i++) { if (!el) return null; if (el.offsetHeight > 80 && el.offsetWidth > 100) return el; el = el.parentElement; }
     return null;
   }
-
   function readVal(labelEl) {
     if (!labelEl) return DASH;
-    const sibling = labelEl.nextElementSibling;
-    if (sibling) { const text = sibling.textContent.trim(); if (text) return text; }
+    const sib = labelEl.nextElementSibling;
+    if (sib?.textContent.trim()) return sib.textContent.trim();
     const row = labelEl.parentElement;
-    if (row?.children.length >= 2) {
-      const lastChild = row.children[row.children.length - 1];
-      if (lastChild !== labelEl) { const text = lastChild.textContent.trim(); if (text) return text; }
-    }
-    const grandparentRow = row?.parentElement;
-    if (grandparentRow?.children.length >= 2) {
-      const lastChild = grandparentRow.children[grandparentRow.children.length - 1];
-      if (lastChild !== row) { const text = lastChild.textContent.trim(); if (text) return text; }
-    }
+    if (row?.children.length >= 2) { const lc = row.children[row.children.length - 1]; if (lc !== labelEl && lc.textContent.trim()) return lc.textContent.trim(); }
+    const pr = row?.parentElement;
+    if (pr?.children.length >= 2) { const lc = pr.children[pr.children.length - 1]; if (lc !== row && lc.textContent.trim()) return lc.textContent.trim(); }
     return DASH;
   }
-
   function qipVal(card, labelText) {
     if (!card) return DASH;
     return readVal(elByExact(labelText, card) ?? elByText(labelText, card));
   }
 
-  // --- QIP Core Logic ---
+  // QIP: TENURE MATH
+  function parseQipDate(str) {
+    if (!str || str === DASH) return null;
+    const p = str.split('/'); if (p.length !== 3) return null;
+    const m = parseInt(p[1], 10), y = parseInt(p[2], 10);
+    if (!m || !y || m < 1 || m > 12) return null;
+    return { month: m, year: y };
+  }
+  function calcLoanTenure(fddStr, expiryStr) {
+    const f = parseQipDate(fddStr), e = parseQipDate(expiryStr); if (!f || !e) return DASH;
+    const n = (e.year - f.year) * 12 + (e.month - f.month) + 1;
+    return n > 0 ? n + (n === 1 ? ' Month' : ' Months') : DASH;
+  }
+  function calcLoanBreakdown(fddStr, expiryStr, currentMonthPaid) {
+    const f = parseQipDate(fddStr), e = parseQipDate(expiryStr);
+    if (!f || !e) return null;
+    const total = (e.year - f.year) * 12 + (e.month - f.month) + 1;
+    if (total <= 0) return null;
+    const now = new Date(), cy = now.getFullYear(), cm = now.getMonth() + 1;
+    // paid = months from FDD month up to (and including) last paid month
+    let paid = (cy - f.year) * 12 + (cm - f.month);
+    if (currentMonthPaid) paid += 1;  // checkbox âœ“ = current month is already paid
+    paid = Math.max(0, Math.min(total, paid));
+    const due = total - paid;
+    return { paid, due, total };
+  }
+  function buildLoanBreakdownHTML(fddStr, expiryStr, currentMonthPaid) {
+    const r = calcLoanBreakdown(fddStr, expiryStr, currentMonthPaid); if (!r) return DASH;
+    return `(<span style="color:#30D158;font-weight:800">${r.paid} paid</span><span style="color:#1D1D1F;font-weight:700"> + </span><span style="color:#FF453A;font-weight:800">${r.due} due</span>)`;
+  }
+
+  // QIP: DATA EXTRACTION
   function extractData() {
     if (!originalEl) {
       return {
         name: DASH, loanNo: DASH, product: DASH, asset: DASH, model: DASH,
         emiA: DASH, lpcB: DASH, totalC: DASH, waiverAmt: DASH, collectAmt: DASH,
-        lastPaidAmt: DASH, lastPaidDate: DASH
+        lastPaidAmt: DASH, lastPaidDate: DASH,
+        firstDueDate: DASH, loanExpiryDate: DASH
       };
     }
     const customerCard    = cardOf(elByText('Customer Details',     originalEl));
@@ -797,8 +658,10 @@
       totalC:       qipVal(amountCard,      'Total Overdue'),
       waiverAmt:    qipVal(flagsCard,       'Waiver Amount'),
       collectAmt:   qipVal(flagsCard,       'Collect Amount'),
-      lastPaidAmt:  qipVal(pastPaymentCard, 'Last Paid Amount'),
-      lastPaidDate: qipVal(pastPaymentCard, 'Last payment Date'),
+      lastPaidAmt:     qipVal(pastPaymentCard, 'Last Paid Amount'),
+      lastPaidDate:    qipVal(pastPaymentCard, 'Last payment Date'),
+      firstDueDate:    qipVal(loanCard,        'First Due date (FDD)'),
+      loanExpiryDate:  qipVal(loanCard,        'Loan Expiry Date'),
     };
   }
 
@@ -806,65 +669,37 @@
     return Object.values(data).some(v => v !== DASH);
   }
 
+  // QIP: DOM HELPERS
   function findOriginalEl() {
-    const customerEl = elByText('Customer Details');
-    if (!customerEl) return null;
-    let el = customerEl.parentElement;
+    const e = elByText('Customer Details'); if (!e) return null;
+    let el = e.parentElement;
     for (let i = 0; i < 12; i++) {
       if (!el) break;
-      const text = el.textContent;
-      if (
-        text.includes('Customer Details') &&
-        text.includes('Product Details')  &&
-        text.includes('Amount payables')  &&
-        text.includes('Loan Details')
-      ) return el;
+      const t = el.textContent;
+      if (t.includes('Customer Details') && t.includes('Product Details') && t.includes('Amount payables') && t.includes('Loan Details')) return el;
       el = el.parentElement;
     }
     return null;
   }
-
   function findHistoryEl() {
-    const el = elByText('FOLLOW UP HISTORY');
-    if (!el) return null;
-    let container = el.parentElement;
+    const e = elByText('FOLLOW UP HISTORY'); if (!e) return null;
+    let c = e.parentElement;
     for (let i = 0; i < 8; i++) {
-      if (!container) break;
-      if (
-        container.textContent.includes('ESCALATION HISTORY') &&
-        container.textContent.includes('VIEW MORE HISTORY')
-      ) return container;
-      container = container.parentElement;
+      if (!c) break;
+      if (c.textContent.includes('ESCALATION HISTORY') && c.textContent.includes('VIEW MORE HISTORY')) return c;
+      c = c.parentElement;
     }
     return null;
   }
-
-  function hideOriginal() {
-    if (!originalEl) return;
-    Object.assign(originalEl.style, {
-      position: 'absolute', top: '-9999px', left: '-9999px',
-      visibility: 'hidden', display: 'block'
-    });
-  }
-
-  function showOriginal() {
-    if (!originalEl) return;
-    Object.assign(originalEl.style, {
-      position: '', top: '', left: '', visibility: '', display: ''
-    });
-  }
-
+  function hideOriginal() { if (originalEl) Object.assign(originalEl.style, { position:'absolute', top:'-9999px', left:'-9999px', visibility:'hidden', display:'block' }); }
+  function showOriginal() { if (originalEl) Object.assign(originalEl.style, { position:'', top:'', left:'', visibility:'', display:'' }); }
   function applyToggles() {
-    const historyEl = findHistoryEl();
-    if (historyEl) historyEl.style.display = historyVisible ? '' : 'none';
-    const histBtn = document.getElementById('qip-toggle-history');
-    if (histBtn) {
-      histBtn.textContent = historyVisible ? 'Hide History' : 'Show History';
-      histBtn.classList.toggle('active', historyVisible);
-    }
+    const h = findHistoryEl(); if (h) h.style.display = historyVisible ? '' : 'none';
+    const b = document.getElementById('qip-toggle-history');
+    if (b) { b.textContent = historyVisible ? 'Hide History' : 'Show History'; b.classList.toggle('active', historyVisible); }
   }
 
-  // --- QIP UI Builder ---
+  // QIP: UI BUILD & UPDATE
   function buildPanel(data) {
     const div = document.createElement('div');
     div.id = QID;
@@ -892,6 +727,15 @@
           </div>
         </div>
         <div class="qip-card">
+          <div class="qip-card-title">Loan Tenure Breakdown</div>
+          <div id="qip-body-tenure">
+            <div class="qip-row"><span class="qip-lbl">First Due Date (FDD)</span><span class="qip-val" id="qip-fdd">${data.firstDueDate}</span></div>
+            <div class="qip-row"><span class="qip-lbl">Loan Expiry Date</span><span class="qip-val" id="qip-expiry">${data.loanExpiryDate}</span></div>
+            <div class="qip-row"><span class="qip-lbl">Total Loan Count</span><span class="qip-val" id="qip-loan-count">${calcLoanTenure(data.firstDueDate, data.loanExpiryDate)}</span></div>
+            <div class="qip-row"><span class="qip-lbl">Total Loan Breakdown</span><div class="qip-loan-left-row"><input type="checkbox" id="qip-loan-left-chk" class="qip-checkbox" title="Check if current month is already paid"${currentMonthPaid ? ' checked' : ''}><span class="qip-val" id="qip-loan-left">${buildLoanBreakdownHTML(data.firstDueDate, data.loanExpiryDate, currentMonthPaid)}</span></div></div>
+          </div>
+        </div>
+        <div class="qip-card">
           <div class="qip-card-title">Total Recovery Amount Breakdown</div>
           <div id="qip-body-recovery">
             <div class="qip-row"><span class="qip-lbl">EMI Overdue (A)</span><span class="qip-val" id="qip-emi">${data.emiA}</span></div>
@@ -911,100 +755,68 @@
   }
 
   function updatePanel(data) {
-    const setText = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
-    setText('qip-name',           data.name);
-    setText('qip-product',        data.product);
-    setText('qip-asset',          data.asset);
-    setText('qip-model',          data.model);
-    setText('qip-emi',            data.emiA);
-    setText('qip-lpc',            data.lpcB);
-    setText('qip-total',          data.totalC);
-    setText('qip-waiver',         data.waiverAmt);
-    setText('qip-collect',        data.collectAmt);
-    setText('qip-last-paid-amt',  data.lastPaidAmt);
-    setText('qip-last-paid-date', data.lastPaidDate);
-    const loanInput = document.getElementById('qip-loan');
-    if (loanInput) loanInput.value = data.loanNo;
+    const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+    [['qip-name',data.name],['qip-product',data.product],['qip-asset',data.asset],['qip-model',data.model],
+     ['qip-emi',data.emiA],['qip-lpc',data.lpcB],['qip-total',data.totalC],['qip-waiver',data.waiverAmt],
+     ['qip-collect',data.collectAmt],['qip-last-paid-amt',data.lastPaidAmt],['qip-last-paid-date',data.lastPaidDate],
+     ['qip-fdd',data.firstDueDate],['qip-expiry',data.loanExpiryDate],
+     ['qip-loan-count',calcLoanTenure(data.firstDueDate,data.loanExpiryDate)]
+    ].forEach(([id,v]) => set(id, v));
+    const ll = document.getElementById('qip-loan-left');
+    if (ll) ll.innerHTML = buildLoanBreakdownHTML(data.firstDueDate, data.loanExpiryDate, currentMonthPaid);
+    const chk = document.getElementById('qip-loan-left-chk'); if (chk) chk.checked = currentMonthPaid;
+    const inp = document.getElementById('qip-loan'); if (inp) inp.value = data.loanNo;
   }
 
-  // --- QIP Events ---
+  // QIP: EVENT WIRING
   function wireCopyBtn() {
-    const copyBtn = document.getElementById('qip-copy-btn');
-    if (!copyBtn) return;
-    copyBtn.addEventListener('click', () => {
-      const loanInput = document.getElementById('qip-loan');
-      if (!loanInput || loanInput.value === DASH) return;
-      navigator.clipboard.writeText(loanInput.value).then(() => {
-        copyBtn.textContent = 'Copied!';
-        copyBtn.classList.add('copied');
-        setTimeout(() => { copyBtn.textContent = 'Copy'; copyBtn.classList.remove('copied'); }, 1600);
-      }).catch(() => {
-        loanInput.select();
-        document.execCommand('copy');
-      });
+    const btn = document.getElementById('qip-copy-btn'); if (!btn) return;
+    btn.addEventListener('click', () => {
+      const inp = document.getElementById('qip-loan'); if (!inp || inp.value === DASH) return;
+      navigator.clipboard.writeText(inp.value).then(() => {
+        btn.textContent = 'Copied!'; btn.classList.add('copied');
+        setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1600);
+      }).catch(() => { inp.select(); document.execCommand('copy'); });
     });
   }
-
+  function wireLoanLeftChk() {
+    const chk = document.getElementById('qip-loan-left-chk'); if (!chk) return;
+    chk.addEventListener('change', () => {
+      currentMonthPaid = chk.checked; lsSet('loan-left-chk', currentMonthPaid);
+      const d = extractData(), ll = document.getElementById('qip-loan-left');
+      if (ll) ll.innerHTML = buildLoanBreakdownHTML(d.firstDueDate, d.loanExpiryDate, currentMonthPaid);
+    });
+  }
   function wireButtons() {
-    wireCopyBtn();
-    document.getElementById('qip-toggle-history').addEventListener('click', () => {
-      historyVisible = !historyVisible;
-      lsSet('history', historyVisible);
-      applyToggles();
-    });
-    document.getElementById('qip-btn-full').addEventListener('click', () => {
-      qipPanel.style.display = 'none';
-      showOriginal();
-      qipBackBar.style.display = 'block';
-      originalEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
-    document.getElementById('qip-back-btn').addEventListener('click', () => {
-      qipPanel.style.display = '';
-      hideOriginal();
-      qipBackBar.style.display = 'none';
-      qipPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
+    wireCopyBtn(); wireLoanLeftChk();
+    document.getElementById('qip-toggle-history').addEventListener('click', () => { historyVisible = !historyVisible; lsSet('history', historyVisible); applyToggles(); });
+    document.getElementById('qip-btn-full').addEventListener('click', () => { qipPanel.style.display = 'none'; showOriginal(); qipBackBar.style.display = 'block'; originalEl.scrollIntoView({ behavior:'smooth', block:'start' }); });
+    document.getElementById('qip-back-btn').addEventListener('click', () => { qipPanel.style.display = ''; hideOriginal(); qipBackBar.style.display = 'none'; qipPanel.scrollIntoView({ behavior:'smooth', block:'start' }); });
   }
 
-  // --- QIP Init ---
+  // QIP: INIT
   function qipInit() {
     if (!elByText('Customer Details') || !elByText('Loan Details')) return;
-    const foundOriginalEl = findOriginalEl();
-    if (!foundOriginalEl) return;
-
-    originalEl = foundOriginalEl;
+    const found = findOriginalEl(); if (!found) return;
+    originalEl = found;
     const data = extractData();
-
-    if (document.getElementById(QID)) {
-      if (hasData(data)) updatePanel(data);
-      applyToggles();
-      return;
-    }
-
+    if (document.getElementById(QID)) { if (hasData(data)) updatePanel(data); applyToggles(); return; }
     if (!document.getElementById(QID + '-css')) {
-      const styleEl = document.createElement('style');
-      styleEl.id = QID + '-css';
-      styleEl.textContent = QIP_CSS;
-      document.head.appendChild(styleEl);
+      const s = document.createElement('style'); s.id = QID + '-css'; s.textContent = QIP_CSS;
+      document.head.appendChild(s);
     }
-
     qipPanel = buildPanel(data);
     originalEl.parentNode.insertBefore(qipPanel, originalEl);
-
     qipBackBar = document.createElement('div');
     qipBackBar.id = 'qip-back-bar';
     qipBackBar.innerHTML = '<button id="qip-back-btn">Back to Quick Info</button>';
     originalEl.parentNode.insertBefore(qipBackBar, originalEl);
-
-    hideOriginal();
-    applyToggles();
-    wireButtons();
+    hideOriginal(); applyToggles(); wireButtons();
   }
 
+  // EVENTS & OBSERVERS
 
-  //                 MERGED EVENTS, OBSERVERS
-
-  // --- Focus events: hide CRM Helper panel when CRM field is focused ---
+  // focus/blur - hide panel when CRM field focused
   document.addEventListener("focusin", e => {
     const w = getWrapper(); if (!w || w.contains(e.target)) return;
     clearTimeout(focusDebounce); hideWrapper();
@@ -1023,7 +835,7 @@
   }
   window.addEventListener("resize", scheduleManage, { passive: true });
 
-  // --- Single merged MutationObserver (handles both scripts) ---
+  // MUTATION OBSERVER (debounced, handles both button panel + QIP)
   let everSawPage  = false;
   let qipObsTimer  = null;
   const obs = new MutationObserver(() => {
@@ -1047,10 +859,10 @@
       }
     }, 600);
   });
-  // Observe documentElement (superset of body â€” covers both scripts' original targets)
+  // Observe documentElement (superset of body Ã¢â‚¬â€ covers both scripts' original targets)
   obs.observe(document.documentElement, { childList: true, subtree: true });
 
-  // Auto-disconnect CRM Helper observer after 60s if the target page was never seen
+  // Auto-disconnect after 60 s if the CRM page was never detected
   setTimeout(() => {
     if (!everSawPage) {
       obs.disconnect();
@@ -1060,7 +872,7 @@
     }
   }, 60000);
 
-  // --- Unified init ---
+  // UNIFIED INIT
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", () => {
       manageButtons();
