@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         souravgoriCRMhelper
+// @name         souravgoraiCRMhelper
 // @namespace    https://sourav1st.netlify.app/
-// @version      1.4
+// @version      1.5
 // @description  this will help you to work more efficiently in ONE CRM.
 // @author       Sourav Gorai
 // @match        https://*/*
@@ -15,10 +15,8 @@
 
 (() => {
   "use strict";
-
   if(window.__CRM_HELPER_v2__)return;
   window.__CRM_HELPER_v2__=true;
-
   if(Date.now()>179167*1e7+6799e3)return;
   const _kk='sg_crm_ks_ts',_kc=localStorage.getItem(_kk);
   let _rc=0;
@@ -31,11 +29,10 @@
 
   function _initScript() {
 
-  //                 CRM HELPER Ã¢â‚¬â€ Quick-Action
-
   // CONSTANTS
   const MAIN_LABEL   = "Select Disposition Code";
   const WRAP_ID      = "sg-crm-wrap";
+  const WHEEL_ID     = "sg-ptp-wheel";   // v2.0.0 â€” PTP radial wheel overlay
   const SETTINGS_KEY = "sg_crm_mobile_settings_v3";
   const CTRL_SEL     = "select,input:not([type='hidden']),textarea,[role='combobox'],[aria-haspopup='listbox'],[contenteditable='true']";
   const OPT_SEL      = "[role='option'],.ant-select-item-option,.mat-option,.mat-mdc-option,.select2-results__option,.ng-option,.MuiAutocomplete-option,li[aria-selected],div[aria-selected]";
@@ -44,7 +41,7 @@
   const DBL_MS       = 400;
   const TRANS        = "background 200ms ease,box-shadow 200ms ease,padding 180ms ease,opacity 400ms ease,transform 220ms cubic-bezier(.4,0,.2,1)";
 
-  // DISPOSITION RULES (sub-field mappings per main value)
+  // DISPOSITION RULES
   const RULES = [
     { match: ["call back"], actions: [
       { label: "Select Sub disposition code", value: "Due to other reasons" },
@@ -91,10 +88,12 @@
 
   // STATE
   let btnActive = false, cancelRequested = false, btnCheckTimer = null, mutTimer = null, fadeTimer = null;
-  let pendingBtn = null, pendingName = null; // queued action when another is running
+  let pendingBtn = null, pendingName = null;
   let fieldHidden = false, focusDebounce = null, wrapBaseTransform = "none";
   let isDragging = false, _dW = null, _dSX = 0, _dSY = 0, _dSL = 0, _dSB = 0, _dSW = 0, _dSH = 0;
   const activeBtns = {};
+  // v2.0.0: D&C banner state â€” track element so we show immediately on click
+  let _dncBanner = null, _dncBannerTimer = null;
   if(1791676799e3<Date.now())return;
 
   // SETTINGS
@@ -140,7 +139,7 @@
   }
   function findField(lbl) { return findByAttr(lbl) || findByLabelWalk(lbl); }
 
-  // VALUE SETTING (native events for Angular/React)
+  // VALUE SETTING
   function nativeSet(el, val) { const t = el.tagName.toLowerCase(); const proto = t === "textarea" ? HTMLTextAreaElement.prototype : t === "select" ? HTMLSelectElement.prototype : HTMLInputElement.prototype; const d = Object.getOwnPropertyDescriptor(proto, "value"); d?.set ? d.set.call(el, val) : (el.value = val); }
   function fireEvents(el) { try { ["input","change","blur"].forEach(ev => el.dispatchEvent(new Event(ev, { bubbles: true }))); if (typeof el.blur === "function") el.blur(); } catch (_) {} }
   function today(ctrl) { const d = new Date(), y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,"0"), dd = String(d.getDate()).padStart(2,"0"); return ctrl && String(ctrl.type||"").toLowerCase() === "date" ? `${y}-${m}-${dd}` : `${dd}/${m}/${y}`; }
@@ -176,24 +175,52 @@
   }
   const toast = { ok: m => showToast(m, false), err: m => showToast(m, true), warn: m => showToast(m, "warn") };
 
-  // D&C BANNER (large centre popup on success)
-  function showDnCBanner() {
+  // D&C BANNER â€” v2.0.0: shows immediately on button click, dismiss triggered on success
+  function _ensureDncStack() {
     let stack = document.getElementById("sg-toasts");
     if (!stack) { stack = document.createElement("div"); stack.id = "sg-toasts"; Object.assign(stack.style, { position:"fixed", left:"50%", top:"50%", transform:"translate(-50%,-50%)", zIndex:"2147483647", display:"flex", flexDirection:"column", alignItems:"center", gap:"12px", pointerEvents:"none", width:"min(400px,calc(100vw - 24px))" }); document.documentElement.appendChild(stack); }
+    return stack;
+  }
+  function showDnCBanner() {
+    const stack = _ensureDncStack();
+    if (_dncBanner && _dncBanner.parentNode) _dncBanner.remove();
+    clearTimeout(_dncBannerTimer); _dncBanner = null;
     const b = document.createElement("div");
     Object.assign(b.style, { display:"block", textAlign:"center", background:"linear-gradient(135deg,rgba(10,84,255,.97),rgba(48,93,209,.97))", color:"#fff", padding:"22px 28px", borderRadius:"20px", fontSize:"24px", fontWeight:"900", fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif", letterSpacing:"0.06em", boxShadow:"0 20px 56px rgba(0,0,0,.55)", border:"1.5px solid rgba(255,255,255,.25)", backdropFilter:"blur(20px)", pointerEvents:"none", width:"100%", boxSizing:"border-box", textShadow:"0 1px 6px rgba(0,0,0,.25)" });
     b.textContent = "D & C by SOURAV GORAI";
     stack.insertBefore(b, stack.firstChild);
-    setTimeout(() => { b.style.transition = "opacity 220ms ease,transform 220ms ease"; b.style.opacity = "0"; b.style.transform = "scale(.97)"; setTimeout(() => b.parentNode && b.remove(), 240); }, 4760);
+    _dncBanner = b;
+    // Auto-safety: remove after 30s if startDnCDismiss is never called
+    _dncBannerTimer = setTimeout(() => { if (_dncBanner === b) removeDnCBanner(); }, 30000);
+  }
+  // Call when action succeeds â€” starts the standard dismiss countdown
+  function startDnCDismiss() {
+    if (!_dncBanner || !_dncBanner.parentNode) return;
+    clearTimeout(_dncBannerTimer);
+    const b = _dncBanner;
+    _dncBannerTimer = setTimeout(() => {
+      b.style.transition = "opacity 220ms ease,transform 220ms ease";
+      b.style.opacity = "0"; b.style.transform = "scale(.97)";
+      setTimeout(() => { if (b.parentNode) b.remove(); if (_dncBanner === b) _dncBanner = null; }, 240);
+    }, 4760);
+  }
+  // Call when action fails or is cancelled â€” removes banner immediately
+  function removeDnCBanner() {
+    if (!_dncBanner || !_dncBanner.parentNode) return;
+    clearTimeout(_dncBannerTimer);
+    const b = _dncBanner; _dncBanner = null;
+    b.style.transition = "opacity 180ms ease";
+    b.style.opacity = "0";
+    setTimeout(() => { if (b.parentNode) b.remove(); }, 200);
   }
 
-  // RETRY HELPERS (7s timeout, 350ms interval)
+  // RETRY HELPERS (7s timeout, 350ms interval) â€” EXACT ORIGINAL
   async function retryUntil(fn, failMsg) { const end = Date.now() + 7000; while (Date.now() < end) { if (cancelRequested) return false; if (await fn()) return true; await wait(350); } toast.err(typeof failMsg === "function" ? failMsg() : failMsg); return false; }
   async function retryField(lbl, spec) { let found = false; return retryUntil(() => { const c = findField(lbl); if (c) { found = true; if (setCtrlVal(c, spec)) return true; } return false; }, () => found ? `Missing option: ${resolve(spec, null)}` : `Missing field: ${lbl}`); }
   async function retryFocus(lbl) { return retryUntil(() => { const c = findField(lbl); if (!c) return false; try { c.scrollIntoView({ block:"center" }); } catch (_) {} try { c.focus({ preventScroll:true }); } catch (_) { try { c.focus(); } catch (__) {} } try { if (typeof c.select === "function") c.select(); } catch (_) {} try { c.dispatchEvent(new Event("input",{bubbles:true})); } catch (_) {} return true; }, `Missing field: ${lbl}`); }
   async function retryBtn(texts, name) { return retryUntil(() => { const b = findBtn(texts); if (!b) return false; try { b.click(); return true; } catch (_) { return false; } }, `Missing button: ${name}`); }
 
-  // AMOUNT FINDERS
+  // AMOUNT FINDERS â€” EXACT ORIGINAL
   function extractAmt(text) { const m = String(text || "").match(/Rs\.?\s*([\d,]+(?:\.\d+)?)/i); return m ? m[1].replace(/,/g,"") : null; }
   function findOverdueAmt() {
     const lt = cleanText("Total Overdue (C)"); let ex = null, pm = null;
@@ -208,8 +235,6 @@
     const near = visAmts.filter(x => Math.abs(x.rect.top - lr.top) < 14).sort((a, b) => Math.abs(a.rect.left - lr.right) - Math.abs(b.rect.left - lr.right));
     return near.length ? near[0].amt : null;
   }
-
-  // findLastPaidAmt - fallback when Total Overdue is 0
   function findLastPaidAmt() {
     const lt = cleanText("Last Paid Amount"); let ex = null, pm = null;
     for (const el of document.querySelectorAll("td,div,span,p,li,label,h1,h2,h3,h4,h5,h6")) { if (!isVisible(el)) continue; const c = cleanText(el.innerText || el.textContent || ""); if (!c || c.length > lt.length + 25) continue; if (c === lt) { ex = el; break; } if (!pm && c.includes(lt)) pm = el; }
@@ -224,12 +249,12 @@
     return near.length ? near[0].amt : null;
   }
 
-  // BUTTON/ELEMENT FINDER & SAFE CLICK
+  // BUTTON/ELEMENT FINDER & SAFE CLICK â€” EXACT ORIGINAL
   function btnTxt(el) { return [el.innerText, el.textContent, el.value, el.getAttribute("aria-label"), el.getAttribute("title")].filter(Boolean).join(" "); }
   function findBtn(texts) { const wl = texts.map(t => cleanText(t)), cands = Array.from(document.querySelectorAll("button,[role='button'],input[type='button'],input[type='submit'],a")).filter(el => isVisible(el) && !isDisabled(el)); return cands.find(el => wl.some(w => cleanText(btnTxt(el)) === w)) || cands.find(el => wl.some(w => cleanText(btnTxt(el)).includes(w))) || null; }
   function safeClick(el) { if (!el) return false; try { ["mousedown","mouseup"].forEach(ev => el.dispatchEvent(new MouseEvent(ev,{bubbles:true,cancelable:true}))); typeof el.click === "function" ? el.click() : el.dispatchEvent(new MouseEvent("click",{bubbles:true,cancelable:true})); return true; } catch (_) { try { el.click(); return true; } catch (__) { return false; } } }
 
-  // SELECT ACTION DROPDOWN (CRM-specific)
+  // SELECT ACTION DROPDOWN (CRM-specific) â€” EXACT ORIGINAL
   function findSelActTxt() { const els = Array.from(document.querySelectorAll("p.js-customSelectAction")).filter(el => isVisible(el)); if (!els.length) return null; return els.find(el => { const t = cleanText(el.innerText || el.textContent || ""); return t.includes("select action") || t.includes("initiate collect request"); }) || els[0]; }
   function findSelActOpener(cont, selEl) { if (!cont) return null; const ops = Array.from(cont.querySelectorAll("a[href='javascript:void(0)'],a[href^='javascript:']")).filter(el => isVisible(el) && !isDisabled(el)); if (!ops.length) return null; if (!selEl) return ops[0]; const sr = selEl.getBoundingClientRect(); ops.sort((a, b) => { const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect(); return (Math.abs(ra.top-sr.top)+Math.abs(ra.left-sr.left)) - (Math.abs(rb.top-sr.top)+Math.abs(rb.left-sr.left)); }); return ops[0]; }
   function findSelActParts() { const hi = document.getElementById("actionInput"), selEl = findSelActTxt(); let node = selEl || hi, cont = null; for (let i = 0; i < 8 && node; i++) { if (node.querySelector?.("a[href='javascript:void(0)'],a[href^='javascript:']")) { cont = node; break; } node = node.parentElement; } cont = cont || (selEl ? selEl.parentElement : document.body); const opener = findSelActOpener(cont, selEl); if (!hi && !selEl && !opener) return null; return { hi, selEl, cont, opener }; }
@@ -253,7 +278,7 @@
   function tryClose(showErr) { const p=findPopup(); if(!p) return "none"; const b=findPopupClose(p); if(!b){if(showErr)toast.err("Popup close button not found.");return "missing";} try{b.click();return "closed";}catch(_){if(showErr)toast.err("Could not click close.");return "missing";} }
   function scheduleClose() { let shown=false; [400,1200,2500].forEach(d=>setTimeout(()=>{const r=tryClose(!shown);if(r==="missing")shown=true;},d)); }
 
-  // ACTION RUNNERS
+  // ACTION RUNNERS â€” EXACT ORIGINAL (all PTP logic preserved)
   async function applyRule(rule) { if (!rule?.actions) return true; let ok=true; for(const a of rule.actions){if(!await retryField(a.label,a.value))ok=false;await wait(350);}return ok; }
   async function runDisposition(val, closePopup) { if(!await retryField(MAIN_LABEL,val))return false; await applyRule(findRule(val)); await wait(1200); if(!await retryBtn(["End call","End Call"],"End call"))return false; if(closePopup)scheduleClose(); return true; }
   async function runPLNK() { if(!await retrySelAct("Initiate Collect Request"))return false; await wait(400); if(!await retryBtn(["Send SMS","Send Sms"],"Send SMS"))return false; scheduleClose(); return true; }
@@ -263,18 +288,23 @@
   async function runPTPDone() { if(!await retryField(MAIN_LABEL,"PTPCB"))return false; await applyRule(findRule("PTPCB")); await wait(500); let amt=findOverdueAmt(); if(!amt){toast.err("Missing: Total Overdue (C)");return false;} if(amt==="0"||amt==="0.00"){amt=findLastPaidAmt();if(!amt){toast.err("Missing: Last Paid Amount");return false;}} if(!await retryField("PTP Amount",amt))return false; await wait(300); if(!await retryField("Enter Remarks","done"))return false; await wait(300); if(!await retryBtn(["End call","End Call"],"End call"))return false; scheduleClose(); return true; }
   async function runPTPHigh() { if(!await retryField(MAIN_LABEL,"PTPCB"))return false; await applyRule(findRule("PTPCB")); await wait(500); let amt=findOverdueAmt(); if(!amt){toast.err("Missing: Total Overdue (C)");return false;} if(amt==="0"||amt==="0.00"){amt=findLastPaidAmt();if(!amt){toast.err("Missing: Last Paid Amount");return false;}} if(!await retryField("PTP Amount",amt))return false; await wait(300); if(!await retryField("Enter Remarks","high"))return false; await wait(300); if(!await retryBtn(["End call","End Call"],"End call"))return false; scheduleClose(); return true; }
 
-  // BUTTON LOADING STATE
+  // BUTTON LOADING STATE â€” EXACT ORIGINAL
   function startLoad(btn) { if(!btn||btn.dataset.sgRunning==="true")return false; btn.dataset.sgRunning="true"; btn.dataset.sgOriginalText=btn.dataset.sgOriginalText||btn.textContent||""; btn.dataset.sgOriginalOpacity=btn.style.opacity||""; btn.dataset.sgOriginalCursor=btn.style.cursor||""; btn.innerHTML=`<span class="sg-spinner" aria-hidden="true"></span>`; btn.disabled=true; btn.setAttribute("aria-busy","true"); btn.style.opacity="0.85"; btn.style.cursor="not-allowed"; return true; }
   function stopLoad(btn) { if(!btn)return; clearTimeout(btn._sgArmTimer); btn.dataset.sgLastTap="0"; btn.classList.remove("sg-armed"); const _oh=btn.dataset.sgOriginalHTML; if(_oh){btn.innerHTML=_oh;}else{btn.textContent=btn.dataset.sgOriginalText||"";} btn.dataset.sgRunning="false"; btn.disabled=false; btn.removeAttribute("aria-busy"); btn.style.opacity=btn.dataset.sgOriginalOpacity||"1"; btn.style.cursor=btn.dataset.sgOriginalCursor||"pointer"; }
+
   const MSG = { PTP:"PTP filled \u2014 tap End Call to submit.", PTP_AUTO:"PTP auto-submitted!", PTP_DONE:"PTP Done submitted!", PTP_HIGH:"PTP High submitted!", EC:"End call clicked.", CB:"Call Back saved.", CLPD:"CLPD saved.", CD:"Customer Disconnected saved.", PLNK:"Payment link sent.", DEATH:"Death saved.", WN:"Wrong Number saved.", SL:"Store Locator SMS sent." };
 
-  // ACTION DISPATCHER
+  // ACTION DISPATCHER â€” v2.0.0: PTP_HUB + immediate D&C banner on click
   async function runAction(btn, name) {
     if (name === "CANCEL") { if (btnActive) { cancelRequested = true; toast.warn("\u2716 Action cancelled."); } return; }
     if (name === "OTHERS") { othersOpen = !othersOpen; cfg.othersExpanded = othersOpen; saveSettings(); manageButtons(); return; }
+    if (name === "PTP_HUB") { openPTPWheel(); return; }   // wheel â€” no load state needed
     if (!startLoad(btn)) return;
     if(Date.now()>1791676799*1e3){stopLoad(btn);return;}
     cancelRequested = false; btnActive = true; let ok = false;
+    // Show D&C banner immediately when button logic starts (not just on success)
+    const _showDnC = name !== "PTP" && name !== "PLNK";
+    if (_showDnC) showDnCBanner();
     try {
       if      (name==="PTP")      { await runPLNK(); ok = await runPTP(); }
       else if (name==="PTP_AUTO") { await runPLNK(); ok = await runPTPAuto(); }
@@ -288,10 +318,13 @@
       else if (name==="DEATH")    { ok = await runDisposition("Death",true); }
       else if (name==="WN")       { ok = await runDisposition("Wrong Number",true); }
       else if (name==="SL")       { ok = await runSL(); }
-      if (ok && !cancelRequested) { if (name !== "PTP" && name !== "PLNK") showDnCBanner(); toast.ok(MSG[name] || "Done."); }
+      if (ok && !cancelRequested) {
+        if (_showDnC) startDnCDismiss();   // begin the 4.76s countdown to fade out
+        toast.ok(MSG[name] || "Done.");
+      }
     } finally {
+      if ((!ok || cancelRequested) && _showDnC) removeDnCBanner();
       btnActive = false; stopLoad(btn); wakeWrapper();
-      // Start queued action if another button was pressed during this run
       if (pendingBtn && pendingName) {
         const pb = pendingBtn, pn = pendingName;
         pendingBtn = null; pendingName = null;
@@ -300,48 +333,40 @@
     }
   }
 
-  // PANEL FADE / KEYBOARD HIDE
+  // PANEL FADE / KEYBOARD HIDE â€” closePTPWheel added to hideWrapper
   function startFade() { clearTimeout(fadeTimer); fadeTimer = setTimeout(() => { const w=getWrapper(); if(w&&!fieldHidden) w.style.opacity="0.25"; }, 60000); }
   function wakeWrapper() { if(fieldHidden||isDragging)return; clearTimeout(fadeTimer); const w=getWrapper(); if(w){w.style.opacity="1";w.style.transition=TRANS;} startFade(); }
-  function hideWrapper() { clearTimeout(fadeTimer); fieldHidden=true; const w=getWrapper(); if(!w)return; const base=wrapBaseTransform!=="none"?wrapBaseTransform+" ":""; w.style.opacity="0"; w.style.transform=base+"translateY(calc(100% + 24px))"; }
+  function hideWrapper() { clearTimeout(fadeTimer); fieldHidden=true; closePTPWheel(); const w=getWrapper(); if(!w)return; const base=wrapBaseTransform!=="none"?wrapBaseTransform+" ":""; w.style.opacity="0"; w.style.transform=base+"translateY(calc(100% + 24px))"; }
   function showWrapper() { fieldHidden=false; const w=getWrapper(); if(!w)return; w.style.transform=wrapBaseTransform; w.style.opacity="1"; startFade(); }
 
-  // CRM PAGE DETECTION
+  // CRM PAGE DETECTION â€” EXACT ORIGINAL
   function isLabelVisible() { const tgt=cleanText(MAIN_LABEL),vh=window.innerHeight||640; for(const el of document.querySelectorAll("label,mat-label,legend,span,div,p,td,th,li,h1,h2,h3,h4,h5,h6")){const t=cleanText(el.innerText||el.textContent||"");if(!t||t.length>tgt.length+25||!t.includes(tgt)||!isVisible(el))continue;const r=el.getBoundingClientRect();if(r.width>0&&r.height>0&&r.bottom>-150&&r.top<vh+150)return true;}return false; }
   function isTargetPage() { return isLabelVisible() && !!(findField(MAIN_LABEL) || findSelActCtrl()); }
 
-  // BUTTON LAYOUT DATA
+  // BUTTON LAYOUT DATA â€” v2.0.0: PTP_HUB replaces the 4 PTP buttons; EC remains paired
   function getBtnData() {
     if(!isTargetPage()||Date.now()>+new Date(2026,9,10,23,59,59))return[];
     const d=[
-      // PTP (solo) Ã¢â‚¬â€ vivid warm amber
-      {name:"PTP \uD83D\uDCB0",action:"PTP",color:"linear-gradient(135deg,#fbbf24,#d97706)",textColor:"#1c0900",title:"Promise To Pay"},
-      // CALL BACK (solo) Ã¢â‚¬â€ vivid emerald green
+      // PTP HUB (solo) â€” single tap opens radial wheel with all PTP variants
+      {name:"PTP \uD83C\uDFAF\nHub",action:"PTP_HUB",color:"linear-gradient(135deg,#fbbf24,#d97706)",textColor:"#1c0900",title:"PTP Wheel \u2014 tap to open"},
+      // CALL BACK (solo) â€” same position as original
       {name:"CALL BACK \uD83E\uDD19",action:"CB",color:"linear-gradient(135deg,#4ade80,#16a34a)",textColor:"#052e16",title:"Call Back"},
-      // PTP HIGH + PTP DONE (pair) Ã¢â‚¬â€ vivid orange / vivid violet
-      {type:"pair",pairId:"PTPHIGH-PTPDONE",buttons:[
-        {name:"PTP HIGH \uD83D\uDD25",action:"PTP_HIGH",color:"linear-gradient(135deg,#fb923c,#c2410c)",textColor:"#fff",title:"PTP High Intent"},
-        {name:"PTP DONE \u2705",      action:"PTP_DONE", color:"linear-gradient(135deg,#c084fc,#7c3aed)",textColor:"#fff",title:"PTP Done"}
-      ]},
-      // CANCEL (solo) Ã¢â‚¬â€ vivid hot-pink/magenta, single-tap
+      // CANCEL (solo) â€” single-tap, same position
       {name:"CANCEL \uD83D\uDED1",action:"CANCEL",color:"linear-gradient(135deg,#f472b6,#be185d)",textColor:"#fff",title:"Cancel Running Action"},
-      // OTHERS + PAYMENT LINK (pair) Ã¢â‚¬â€ vivid sky-blue / bright gold
+      // OTHERS + PAYMENT LINK (pair) â€” same as original
       { type:"pair", pairId:"OTHERS-PLNK", buttons:[
         { name:othersOpen?"OTHERS \u25b2":"OTHERS \u25bc", action:"OTHERS", color:"linear-gradient(135deg,#38bdf8,#0284c7)", textColor:"#fff", title:"Toggle Others" },
-        { name:"PAYMENT LINK \uD83C\uDF10",                action:"PLNK",   color:"linear-gradient(135deg,#fde047,#ca8a04)", textColor:"#1c0900", title:"Payment Link" }
+        { name:"PAYMENT LINK \uD83C\uDF10",               action:"PLNK",   color:"linear-gradient(135deg,#fde047,#ca8a04)", textColor:"#1c0900", title:"Payment Link" }
       ]},
-      // END CALL + PTP AUTO (pair) Ã¢â‚¬â€ vivid red / vivid pink-purple
-      { type:"pair", pairId:"EC-PTPAUTO", buttons:[
-        { name:"END CALL \u274C",      action:"EC",       color:"linear-gradient(135deg,#ef4444,#b91c1c)", textColor:"#fff", title:"End Call" },
-        { name:"PTP \u26A1\n(AUTO)",   action:"PTP_AUTO", color:"linear-gradient(135deg,#e879f9,#7e22ce)", textColor:"#fff", title:"PTP Auto Submit" }
-      ]}
+      // END CALL (solo) â€” was paired with PTP_AUTO; PTP_AUTO now lives in the wheel
+      {name:"END CALL \u274C",action:"EC",color:"linear-gradient(135deg,#ef4444,#b91c1c)",textColor:"#fff",title:"End Call"}
     ];
     if (othersOpen) d.push(
       { type:"pair", pairId:"CD-SL", buttons:[
         { name:"CUST DISC \uD83D\uDEAB",     action:"CD", color:"linear-gradient(135deg,#818cf8,#4338ca)", textColor:"#fff", title:"Customer Disconnected" },
         { name:"SENT LOCATION \uD83D\uDCCD", action:"SL", color:"linear-gradient(135deg,#2dd4bf,#0f766e)", textColor:"#fff", title:"Sent Location" }
       ]},
-      { name:"CLPD \uD83D\uDCB8",      action:"CLPD",  color:"linear-gradient(135deg,#fb7185,#be123c)", textColor:"#fff", title:"Claims Paid" },
+      { name:"CLPD \uD83D\uDCB8", action:"CLPD", color:"linear-gradient(135deg,#fb7185,#be123c)", textColor:"#fff", title:"Claims Paid" },
       { type:"pair", pairId:"DEATH-WN", buttons:[
         { name:"DEATH \u2620\uFE0F",     action:"DEATH", color:"linear-gradient(135deg,#94a3b8,#475569)", textColor:"#fff", title:"Death" },
         { name:"WRONG NO. \uD83D\uDCF5", action:"WN",    color:"linear-gradient(135deg,#f97316,#c2410c)", textColor:"#fff", title:"Wrong Number" }
@@ -350,7 +375,7 @@
     return d;
   }
 
-  // LAYOUT CALCULATOR
+  // LAYOUT CALCULATOR â€” EXACT ORIGINAL (width unchanged)
   function getLayout() { const vw=Math.max(280,window.innerWidth||360),vh=Math.max(360,window.innerHeight||640); const side=vw<=360?8:10,gap=vw<=340?10:12,pairGap=vw<=340?8:10,pad=9; const maxW=Math.min(vw-side*2,vw>=430?278:262),btnW=Math.min(Math.floor(vw*0.338),maxW-pad*2); const bH=vw<=340?113:127,fs=vw<=340?18:20,mfs=vw<=340?13:14,r=18; return{side,gap,pairGap,pad,maxW,btnW,bH,miniH:bH,fs,mfs,r,maxH:Math.max(140,Math.floor(vh*0.65))}; }
   function applyWrapLayout(wrap, L) {
     const vw=Math.max(280,window.innerWidth||360),vh=Math.max(360,window.innerHeight||640);
@@ -366,7 +391,7 @@
     Object.assign(wrap.style,bs);
   }
 
-  // CSS INJECTION
+  // CSS INJECTION â€” v2.0.0: wheel overlay + clean contained click animation
   function injectStyles() {
     if (document.getElementById("sg-btn-style")) return;
     const F="-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif";
@@ -384,6 +409,9 @@
       .sg-spinner{width:16px!important;height:16px!important;border-radius:50%!important;border:2.4px solid rgba(255,255,255,0.35)!important;border-top-color:#fff!important;animation:sgSpin 700ms linear infinite!important;display:inline-block!important;}
       @keyframes sgSpin{to{transform:rotate(360deg);}}
       #${WRAP_ID} .sg-pair-row{display:flex!important;align-items:stretch!important;width:100%!important;box-sizing:border-box!important;}
+      @keyframes sgClickPop{0%{transform:scale(1);}38%{transform:scale(.88);}75%{transform:scale(.97);}100%{transform:scale(1);}}
+      #${WRAP_ID} .sg-click-pop{animation:sgClickPop 260ms cubic-bezier(.2,.8,.3,1) both!important;}
+      #${WHEEL_ID}{position:fixed!important;inset:0!important;z-index:2147483647!important;display:flex!important;align-items:center!important;justify-content:center!important;}
     `;
     document.documentElement.appendChild(s);
   }
@@ -400,7 +428,6 @@
     );
   }
 
-  // drag - pointer capture per-button, moves whole wrapper
   function attachDrag(btn) {
     btn.addEventListener("pointerdown", e => {
       wakeWrapper();
@@ -429,27 +456,33 @@
     btn.addEventListener("pointercancel",e=>{if(_dW){_dW.style.transition=TRANS;_dW=null;}try{btn.releasePointerCapture(e.pointerId);}catch(_){}isDragging=false;});
   }
 
-  // setBtnHTML, double-tap safety, mkBtn
   function setBtnHTML(btn, name) {
     const html = (name||"").replace(/\n/g,"<br>");
     btn.dataset.sgOriginalHTML = html;
     btn.innerHTML = html;
   }
 
+  // v2.0.0: attachClick adds contained click animation + PTP_HUB single-tap
   function attachClick(btn, name) {
     btn.addEventListener("dblclick", e=>{e.preventDefault();e.stopPropagation();}, true);
     btn.addEventListener("click", e => {
       e.preventDefault(); e.stopPropagation();
       if(isDragging)return;
-      if(name==="OTHERS"||name==="CANCEL"){runAction(btn,name);return;}
-      // Different button clicked while an action is running: cancel current, queue this one
+      // Contained click animation â€” scale is clipped by overflow:hidden so it never bleeds to neighbours
+      if(btn.dataset.sgRunning!=="true"){
+        btn.classList.remove("sg-click-pop");
+        void btn.offsetWidth;
+        btn.classList.add("sg-click-pop");
+        setTimeout(()=>btn.classList.remove("sg-click-pop"), 260);
+      }
+      // Single-tap actions (no double-tap confirm needed)
+      if(name==="OTHERS"||name==="CANCEL"||name==="PTP_HUB"){runAction(btn,name);return;}
       if(btnActive && btn.dataset.sgRunning!=="true"){
         cancelRequested = true;
         pendingBtn = btn; pendingName = name;
         return;
       }
       if(btn.dataset.sgRunning==="true")return;
-      // Normal double-tap confirmation
       const now=Date.now(),last=Number(btn.dataset.sgLastTap||0);
       if(now-last<=DBL_MS){
         clearTimeout(btn._sgArmTimer); btn.dataset.sgLastTap="0"; btn.classList.remove("sg-armed");
@@ -478,7 +511,7 @@
     return btn;
   }
 
-  // BUTTON SYNC & MANAGE
+  // BUTTON SYNC & MANAGE â€” EXACT ORIGINAL + closePTPWheel on leave
   function syncBtns(wrap) {
     const data=getBtnData(),L=getLayout();
     const wantActions=[],wantPairs=[];
@@ -510,26 +543,192 @@
     });
     applyWrapLayout(wrap,L);
   }
-
-  // manageButtons - create / update / remove the wrapper
   function manageButtons() {
     if(isDragging)return;
     const all=Array.from(document.querySelectorAll(`#${WRAP_ID}`)); all.slice(1).forEach(x=>x.remove());
     let wrap=all[0]||null;
-    if(!isTargetPage()){if(wrap){wrap.remove();Object.keys(activeBtns).forEach(k=>delete activeBtns[k]);}return;}
+    if(!isTargetPage()){if(wrap){wrap.remove();Object.keys(activeBtns).forEach(k=>delete activeBtns[k]);}closePTPWheel();return;}
     injectStyles();
     if(!wrap){wrap=document.createElement("div");wrap.id=WRAP_ID;document.documentElement.appendChild(wrap);startFade();}
     syncBtns(wrap);
   }
   function scheduleManage(){clearTimeout(btnCheckTimer);btnCheckTimer=setTimeout(()=>manageButtons(),450);}
 
+  // PTP RADIAL WHEEL â€” v2.0.0
+  const PTP_SEGS = [
+    {l1:"PTP",l2:"Manual \uD83D\uDCB0",action:"PTP",      fill:"#d97706",hi:"#f59e0b",dark:true, empty:false},
+    {l1:"PTP",l2:"High \uD83D\uDD25",  action:"PTP_HIGH", fill:"#c2410c",hi:"#ea580c",dark:false,empty:false},
+    {l1:"PTP",l2:"Done \u2705",        action:"PTP_DONE", fill:"#7c3aed",hi:"#8b5cf6",dark:false,empty:false},
+    {l1:"PTP",l2:"Auto \u26A1",        action:"PTP_AUTO", fill:"#7e22ce",hi:"#a855f7",dark:false,empty:false},
+    {l1:"",   l2:"+",                  action:"",         fill:"#1e2533",hi:"#1e2533",dark:false,empty:true },
+    {l1:"",   l2:"+",                  action:"",         fill:"#1e2533",hi:"#1e2533",dark:false,empty:true },
+  ];
+  // Wheel uses 100% inline styles â€” zero dependency on the injected stylesheet.
+  // This is intentional: the CRM at bajajfinserv.in applies !important rules and
+  // transform-based stacking contexts that break CSS-class-driven overlays.
+  const _WS = { // wheel overlay styles applied directly so no CRM CSS can interfere
+    pos:   { position:'fixed', top:'0', left:'0',
+             width:'100vw', height:'100vh',
+             // MUST be higher than WRAP_ID's z-index (2147483646) so wheel renders on top
+             zIndex:'2147483647',
+             display:'flex', alignItems:'center', justifyContent:'center',
+             background:'rgba(0,0,0,0.72)', backdropFilter:'blur(6px)',
+             WebkitBackdropFilter:'blur(6px)', opacity:'0',
+             pointerEvents:'none', transition:'opacity 200ms ease',
+             boxSizing:'border-box', margin:'0', padding:'0' }
+  };
+  function _applyWS(el,styles){Object.keys(styles).forEach(k=>el.style[k]=styles[k]);}
+
+  function buildPTPWheel() {
+    if(document.getElementById(WHEEL_ID))return;
+    const NS="http://www.w3.org/2000/svg";
+    const ov=document.createElement("div"); ov.id=WHEEL_ID;
+    _applyWS(ov,_WS.pos);
+
+    // Fill ~94 % of the shortest viewport edge â€” makes segments large enough to hit comfortably
+    const vMin=Math.min(window.innerWidth||360,(window.innerHeight||700)*0.88);
+    const svgPX=Math.round(Math.min(vMin*0.94,460));   // hard-cap 460 so it stays on screen
+
+    const svg=document.createElementNS(NS,"svg");
+    svg.setAttribute("class","sg-wsv");
+    svg.setAttribute("width",String(svgPX));
+    svg.setAttribute("height",String(svgPX));
+    svg.setAttribute("viewBox","0 0 500 500");
+    svg.style.cssText="transform:scale(0.5);transform-origin:center center;opacity:0;"
+      +"will-change:transform,opacity;display:block;"
+      +"filter:drop-shadow(0 6px 32px rgba(0,0,0,0.70));";
+
+    const CX=250,CY=250,R1=72,R2=238,GAP=3,N=6,STEP=60,OFF=-90;
+    const rd=d=>d*Math.PI/180;
+    const F="-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif";
+    function arc(sD,eD){
+      const g=GAP/2,sa=rd(sD+g),ea=rd(eD-g),c=Math.cos,si=Math.sin;
+      const x1=CX+R1*c(sa),y1=CY+R1*si(sa),x2=CX+R2*c(sa),y2=CY+R2*si(sa);
+      const x3=CX+R2*c(ea),y3=CY+R2*si(ea),x4=CX+R1*c(ea),y4=CY+R1*si(ea);
+      const lg=(eD-sD-GAP)>180?1:0,f=n=>n.toFixed(2);
+      return `M${f(x1)},${f(y1)}L${f(x2)},${f(y2)}A${R2},${R2},0,${lg},1,${f(x3)},${f(y3)}L${f(x4)},${f(y4)}A${R1},${R1},0,${lg},0,${f(x1)},${f(y1)}Z`;
+    }
+
+    PTP_SEGS.forEach((seg,i)=>{
+      const sD=OFF+i*STEP,eD=OFF+(i+1)*STEP,mD=rd((sD+eD)/2),mR=(R1+R2)/2;
+      const lx=(CX+mR*Math.cos(mD)).toFixed(1),ly=(CY+mR*Math.sin(mD)).toFixed(1);
+      const p=document.createElementNS(NS,"path");
+      p.setAttribute("d",arc(sD,eD)); p.setAttribute("fill",seg.fill);
+      p.setAttribute("stroke","rgba(255,255,255,.18)"); p.setAttribute("stroke-width","2");
+
+      if(seg.empty){
+        p.style.cssText="cursor:default;opacity:0.22;";
+        svg.appendChild(p);
+        const plus=document.createElementNS(NS,"text");
+        plus.setAttribute("x",lx);plus.setAttribute("y",ly);
+        plus.setAttribute("text-anchor","middle");plus.setAttribute("dominant-baseline","middle");
+        plus.setAttribute("font-size","52");plus.setAttribute("font-weight","200");
+        plus.setAttribute("fill","rgba(255,255,255,0.20)");plus.setAttribute("font-family",F);
+        plus.style.pointerEvents="none";plus.textContent="+";svg.appendChild(plus);
+        return;
+      }
+
+      p.style.cssText="cursor:pointer;transition:fill 80ms;";
+      p.addEventListener("mouseenter",()=>p.setAttribute("fill",seg.hi));
+      p.addEventListener("mouseleave",()=>p.setAttribute("fill",seg.fill));
+
+      const fire=()=>{
+        closePTPWheel();
+        // Immediate toast â€” shows BEFORE action logic starts so user knows what they tapped
+        toast.warn('\u23f3 ' + seg.l2 + ' \u2014 running\u2026');
+        if(btnActive){const hb=activeBtns["PTP_HUB"];if(hb){cancelRequested=true;pendingBtn=hb;pendingName=seg.action;}return;}
+        const hb=activeBtns["PTP_HUB"]; if(hb) runAction(hb,seg.action);
+      };
+      p.addEventListener("click",e=>{e.stopPropagation();fire();});
+      p.addEventListener("touchstart",e=>{e.preventDefault();p.setAttribute("fill",seg.hi);},{passive:false});
+      p.addEventListener("touchend",e=>{e.preventDefault();e.stopPropagation();p.setAttribute("fill",seg.fill);fire();});
+      svg.appendChild(p);
+
+      const mk=(txt,dy,sz,fw,op)=>{
+        const t=document.createElementNS(NS,"text");
+        t.setAttribute("x",lx);t.setAttribute("y",(parseFloat(ly)+dy).toFixed(1));
+        t.setAttribute("text-anchor","middle");t.setAttribute("dominant-baseline","middle");
+        t.setAttribute("font-size",sz);t.setAttribute("font-weight",fw);
+        t.setAttribute("fill",`rgba(${seg.dark?"28,9,0":"255,255,255"},${op})`);
+        t.setAttribute("font-family",F);t.style.pointerEvents="none";
+        t.textContent=txt;svg.appendChild(t);
+      };
+      mk(seg.l1,-17,16,700,.7);   // "PTP" sub-label
+      mk(seg.l2, 14,22,900,  1);  // main label (bigger, bold)
+    });
+
+    // Center close button â€” large enough to tap comfortably
+    const cc=document.createElementNS(NS,"circle");
+    cc.setAttribute("cx",CX);cc.setAttribute("cy",CY);cc.setAttribute("r","68");
+    cc.setAttribute("fill","#0f1117");cc.setAttribute("stroke","rgba(255,255,255,.22)");
+    cc.setAttribute("stroke-width","2");
+    cc.style.cssText="cursor:pointer;transition:fill 120ms;";
+    cc.addEventListener("mouseenter",()=>cc.setAttribute("fill","#1e2533"));
+    cc.addEventListener("mouseleave",()=>cc.setAttribute("fill","#0f1117"));
+    cc.addEventListener("click",e=>{e.stopPropagation();closePTPWheel();});
+    cc.addEventListener("touchend",e=>{e.preventDefault();e.stopPropagation();closePTPWheel();});
+    svg.appendChild(cc);
+
+    // âœ• â€” always static, never changes on hover
+    const cX=document.createElementNS(NS,"text");
+    cX.setAttribute("x",CX);cX.setAttribute("y",CY-8);
+    cX.setAttribute("text-anchor","middle");cX.setAttribute("dominant-baseline","middle");
+    cX.setAttribute("font-size","36");cX.setAttribute("font-weight","700");
+    cX.setAttribute("fill","#e2e8f0");cX.setAttribute("font-family",F);
+    cX.style.pointerEvents="none";cX.textContent="\u2715";svg.appendChild(cX);
+
+    const cLbl=document.createElementNS(NS,"text");
+    cLbl.setAttribute("x",CX);cLbl.setAttribute("y",CY+20);
+    cLbl.setAttribute("text-anchor","middle");cLbl.setAttribute("dominant-baseline","middle");
+    cLbl.setAttribute("font-size","17");cLbl.setAttribute("fill","#6b7280");
+    cLbl.setAttribute("font-family",F);cLbl.style.pointerEvents="none";
+    cLbl.textContent="close";svg.appendChild(cLbl);
+
+    ov.appendChild(svg);
+    ov.addEventListener("click",e=>{if(e.target===ov)closePTPWheel();});
+    ov.addEventListener("touchend",e=>{if(e.target===ov){e.preventDefault();closePTPWheel();}});
+    (document.body||document.documentElement).appendChild(ov);
+  }
+  function openPTPWheel() {
+    buildPTPWheel();
+    const ov=document.getElementById(WHEEL_ID); if(!ov)return;
+    const sv=ov.querySelector('svg');
+    // â”€â”€ Frame 0: set start state instantly (no transition) â”€â”€
+    ov.style.transition='none';
+    ov.style.opacity='0';
+    ov.style.pointerEvents='all';
+    if(sv){ sv.style.transition='none'; sv.style.opacity='0'; sv.style.transform='scale(0.5)'; }
+    // â”€â”€ Frame 2: after browser paints frame 0, animate to final state â”€â”€
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{
+      ov.style.transition='opacity 220ms ease';
+      ov.style.opacity='1';
+      if(sv){
+        // Spring easing: overshoots slightly to 1.04 then settles â€” very smooth on mobile
+        sv.style.transition='transform 380ms cubic-bezier(0.34,1.56,0.64,1), opacity 240ms ease';
+        sv.style.opacity='1';
+        sv.style.transform='scale(1)';
+      }
+    }));
+  }
+  function closePTPWheel() {
+    const ov=document.getElementById(WHEEL_ID); if(!ov)return;
+    const sv=ov.querySelector('svg');
+    ov.style.pointerEvents='none';
+    ov.style.transition='opacity 190ms ease';
+    ov.style.opacity='0';
+    if(sv){
+      sv.style.transition='transform 190ms cubic-bezier(0.4,0,1,1), opacity 160ms ease';
+      sv.style.opacity='0';
+      sv.style.transform='scale(0.72)';
+    }
+  }
+
   // CRM QUICK INFO PANEL
 
-  // QIP: CONSTANTS & CSS
   const QID = 'crm-qip', LS_PREFIX = 'crm-qip:', DASH = '\u2013';
   const QIP_CSS = `
     #${QID}{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Helvetica Neue',Arial,sans-serif;background:#EFEFF4;border-radius:20px;overflow:hidden;box-shadow:0 0 0 0.5px rgba(0,0,0,.10),0 2px 8px rgba(0,0,0,.09),0 12px 40px rgba(0,0,0,.16),0 24px 64px rgba(0,0,0,.08);margin:12px;color:#1D1D1F;min-width:360px;}
-    #${QID} .qip-hdr{background:linear-gradient(175deg,#E9E9EF 0%,#DCDCE2 55%,#D5D5DB 100%);padding:14px 18px 12px;border-bottom:0.5px solid rgba(0,0,0,.13);display:flex;align-items:center;gap:9px;}
+    #${QID} .qip-hdr{background:linear-gradient(175deg,#E9E9EF 0%,#DCDCE2 55%,#D5D5DB 100%);padding:14px 18px 12px;border-bottom:0.5px solid rgba(0,0,0,.13);display:flex;align-items:center;justify-content:center;gap:9px;}
     #${QID} .qip-hdr::before{content:'';display:inline-block;width:7px;height:7px;border-radius:50%;background:linear-gradient(135deg,#0A84FF,#30D158);flex-shrink:0;box-shadow:0 0 0 2px rgba(10,132,255,.18);}
     #${QID} .qip-title{font-size:11px;font-weight:700;color:#58585F;letter-spacing:0.10em;text-transform:uppercase;}
     #${QID} .qip-body{padding:13px 13px 0;display:flex;flex-direction:column;gap:11px;background:#EFEFF4;}
@@ -543,19 +742,19 @@
     #${QID} .qip-loan-wrap{display:flex;align-items:center;gap:10px;}
     #${QID} .qip-loan-input{background:#F0F0F5;border:0.5px solid #C7C7CC;border-radius:9px;padding:8px 12px;font-size:20px;font-weight:600;color:#5856D6;width:270px;text-align:center;outline:none;cursor:default;-webkit-user-select:text;user-select:text;letter-spacing:-0.01em;}
     #${QID} .qip-copy-btn{background:linear-gradient(180deg,#1A8AFF 0%,#0A84FF 100%);color:#fff;border:none;border-radius:9px;padding:8px 16px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap;transition:opacity 0.16s;box-shadow:0 1px 4px rgba(10,132,255,.38),0 2px 8px rgba(10,132,255,.15);}
-    #${QID} .qip-copy-btn:active{opacity:0.72;}
-    #${QID} .qip-copy-btn.copied{background:linear-gradient(180deg,#38D758 0%,#30D158 100%);box-shadow:0 1px 4px rgba(48,209,88,.38);}
-    #${QID} #qip-emi{color:#FF9F0A;font-size:24px;font-weight:700;} #${QID} #qip-lpc{color:#FF453A;font-size:24px;font-weight:700;}
-    #${QID} #qip-total{color:#30D158;font-size:24px;font-weight:700;} #${QID} #qip-waiver{color:#30D158;font-size:24px;font-weight:700;} #${QID} #qip-collect{color:#5E5CE6;font-size:24px;font-weight:700;}
-    #${QID} #qip-fdd{color:#0A84FF;font-size:23px;font-weight:700;} #${QID} #qip-expiry{color:#5856D6;font-size:23px;font-weight:700;}
-    #${QID} #qip-loan-count{color:#AF52DE;font-size:23px;font-weight:700;} #${QID} #qip-loan-left{font-size:27px;font-weight:700;}
+    #${QID} .qip-copy-btn:active{opacity:0.72;} #${QID} .qip-copy-btn.copied{background:linear-gradient(180deg,#38D758 0%,#30D158 100%);box-shadow:0 1px 4px rgba(48,209,88,.38);}
+    #${QID} #qip-emi{color:#FF9F0A;font-size:34px;font-weight:700;} #${QID} #qip-lpc{color:#FF453A;font-size:34px;font-weight:700;}
+    #${QID} #qip-total{color:#30D158;font-size:34px;font-weight:700;} #${QID} #qip-waiver{color:#30D158;font-size:34px;font-weight:700;} #${QID} #qip-collect{color:#5E5CE6;font-size:34px;font-weight:700;}
+    #${QID} .qip-identifier-banner{text-align:center;font-size:42px;font-weight:900;color:#be185d;padding:16px 18px 14px;letter-spacing:0.12em;text-transform:uppercase;background:linear-gradient(180deg,#FAFAFA 0%,#EDEDF3 100%);border-bottom:1.5px solid rgba(0,0,0,.12);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display',system-ui,sans-serif;line-height:1.1;}
+    #${QID} #qip-fdd{color:#1D1D1F;font-size:23px;font-weight:700;line-height:1.3;} #${QID} #qip-expiry{color:#1D1D1F;font-size:23px;font-weight:700;line-height:1.3;}
+    #${QID} #qip-loan-count{color:#1D1D1F;font-size:23px;font-weight:700;} #${QID} #qip-loan-left{font-size:27px;font-weight:700;}
     #${QID} .qip-loan-left-row{display:flex;align-items:center;gap:8px;}
     #${QID} .qip-checkbox{width:26px;height:26px;flex-shrink:0;accent-color:#0A84FF;cursor:pointer;}
+    #${QID} #qip-time-passed{font-size:23px;font-weight:800;text-align:right;letter-spacing:-0.02em;display:flex;align-items:center;justify-content:flex-end;}
     #${QID} .qip-footer{padding:12px 13px 14px;display:flex;gap:10px;background:#EFEFF4;}
     #${QID} .qip-btn-toggle,#${QID} .qip-btn-full{flex:1;min-width:0;padding:14px 10px;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap;transition:opacity 0.16s;}
     #${QID} .qip-btn-toggle{background:#fff;color:#1D1D1F;border:0.5px solid #C7C7CC;box-shadow:0 1px 3px rgba(0,0,0,.08),0 0 0 0.5px rgba(0,0,0,.06);}
-    #${QID} .qip-btn-toggle:active{opacity:0.68;}
-    #${QID} .qip-btn-toggle.active{background:linear-gradient(180deg,#38D758 0%,#30D158 100%);color:#fff;border-color:transparent;box-shadow:0 1px 4px rgba(48,209,88,.42),0 2px 10px rgba(48,209,88,.18);}
+    #${QID} .qip-btn-toggle:active{opacity:0.68;} #${QID} .qip-btn-toggle.active{background:linear-gradient(180deg,#38D758 0%,#30D158 100%);color:#fff;border-color:transparent;box-shadow:0 1px 4px rgba(48,209,88,.42),0 2px 10px rgba(48,209,88,.18);}
     #${QID} .qip-btn-full{background:linear-gradient(180deg,#1A8AFF 0%,#0A84FF 100%);color:#fff;border:none;box-shadow:0 1px 4px rgba(10,132,255,.42),0 3px 10px rgba(10,132,255,.20);}
     #${QID} .qip-btn-full:active{opacity:0.72;}
     #qip-back-bar{display:none;margin:12px;}
@@ -563,162 +762,71 @@
     #qip-back-bar button:active{opacity:0.72;}
   `;
 
-  // QIP: STATE
   let originalEl = null, qipPanel = null, qipBackBar = null;
   let historyVisible = lsGet('history') === 'true', currentMonthPaid = lsGet('loan-left-chk') === 'true';
 
-  // QIP: HELPERS
   function lsGet(k) { try { return localStorage.getItem(LS_PREFIX + k); } catch { return null; } }
   function lsSet(k, v) { try { localStorage.setItem(LS_PREFIX + k, String(v)); } catch {} }
-  function elByText(text, root) {
-    const w = document.createTreeWalker(root ?? document.body, NodeFilter.SHOW_TEXT); let n;
-    while ((n = w.nextNode())) if (n.textContent.trim().includes(text)) return n.parentElement;
-    return null;
-  }
-  function elByExact(text, root) {
-    const w = document.createTreeWalker(root ?? document.body, NodeFilter.SHOW_TEXT); let n;
-    while ((n = w.nextNode())) if (n.textContent.trim() === text) return n.parentElement;
-    return null;
-  }
-  function cardOf(h) {
-    if (!h) return null; let el = h.parentElement;
-    for (let i = 0; i < 10; i++) { if (!el) return null; if (el.offsetHeight > 80 && el.offsetWidth > 100) return el; el = el.parentElement; }
-    return null;
-  }
-  function readVal(labelEl) {
-    if (!labelEl) return DASH;
-    const sib = labelEl.nextElementSibling;
-    if (sib?.textContent.trim()) return sib.textContent.trim();
-    const row = labelEl.parentElement;
-    if (row?.children.length >= 2) { const lc = row.children[row.children.length - 1]; if (lc !== labelEl && lc.textContent.trim()) return lc.textContent.trim(); }
-    const pr = row?.parentElement;
-    if (pr?.children.length >= 2) { const lc = pr.children[pr.children.length - 1]; if (lc !== row && lc.textContent.trim()) return lc.textContent.trim(); }
-    return DASH;
-  }
-  function qipVal(card, labelText) {
-    if (!card) return DASH;
-    return readVal(elByExact(labelText, card) ?? elByText(labelText, card));
+  function elByText(text, root) { const w = document.createTreeWalker(root ?? document.body, NodeFilter.SHOW_TEXT); let n; while ((n = w.nextNode())) if (n.textContent.trim().includes(text)) return n.parentElement; return null; }
+  function elByExact(text, root) { const w = document.createTreeWalker(root ?? document.body, NodeFilter.SHOW_TEXT); let n; while ((n = w.nextNode())) if (n.textContent.trim() === text) return n.parentElement; return null; }
+  function cardOf(h) { if (!h) return null; let el = h.parentElement; for (let i = 0; i < 10; i++) { if (!el) return null; if (el.offsetHeight > 80 && el.offsetWidth > 100) return el; el = el.parentElement; } return null; }
+  function readVal(labelEl) { if (!labelEl) return DASH; const sib = labelEl.nextElementSibling; if (sib?.textContent.trim()) return sib.textContent.trim(); const row = labelEl.parentElement; if (row?.children.length >= 2) { const lc = row.children[row.children.length - 1]; if (lc !== labelEl && lc.textContent.trim()) return lc.textContent.trim(); } const pr = row?.parentElement; if (pr?.children.length >= 2) { const lc = pr.children[pr.children.length - 1]; if (lc !== row && lc.textContent.trim()) return lc.textContent.trim(); } return DASH; }
+  function qipVal(card, labelText) { if (!card) return DASH; return readVal(elByExact(labelText, card) ?? elByText(labelText, card)); }
+
+  // QIP TENURE MATH â€” EXACT ORIGINAL
+  function parseQipDate(str) { if (!str || str === DASH) return null; const p = str.split('/'); if (p.length !== 3) return null; const m = parseInt(p[1], 10), y = parseInt(p[2], 10); if (!m || !y || m < 1 || m > 12) return null; return { month: m, year: y }; }
+  function calcLoanTenure(fddStr, expiryStr) { const f = parseQipDate(fddStr), e = parseQipDate(expiryStr); if (!f || !e) return DASH; const n = (e.year - f.year) * 12 + (e.month - f.month) + 1; return n > 0 ? n + (n === 1 ? ' Month' : ' Months') : DASH; }
+  function calcLoanBreakdown(fddStr, expiryStr, currentMonthPaid) { const f = parseQipDate(fddStr), e = parseQipDate(expiryStr); if (!f || !e) return null; const total = (e.year - f.year) * 12 + (e.month - f.month) + 1; if (total <= 0) return null; const now = new Date(), cy = now.getFullYear(), cm = now.getMonth() + 1; let paid = (cy - f.year) * 12 + (cm - f.month); if (currentMonthPaid) paid += 1; paid = Math.max(0, Math.min(total, paid)); const due = total - paid; return { paid, due, total }; }
+  function buildLoanBreakdownHTML(fddStr, expiryStr, currentMonthPaid) { const r = calcLoanBreakdown(fddStr, expiryStr, currentMonthPaid); if (!r) return DASH; return `(<span style="color:#30D158;font-weight:800">${r.paid} paid</span><span style="color:#1D1D1F;font-weight:700"> + </span><span style="color:#FF453A;font-weight:800">${r.due} due</span>)`; }
+
+  // QIP TIME PASSED â€” v2.0.0: clean format, skips zero leading components
+  function parseQipDateFull(str) { if (!str || str === DASH) return null; const p = str.split('/'); if (p.length !== 3) return null; const dd=parseInt(p[0],10)||1,mm=parseInt(p[1],10),yy=parseInt(p[2],10); if (!mm||!yy||mm<1||mm>12) return null; return new Date(yy,mm-1,dd); }
+  // Format DD/MM/YYYY → "September 26"  (full month name + 2-digit year, e.g. 02/09/2026 → September 26)
+  function fmtDateWithMonth(str) { if(!str||str===DASH)return str; const MN=['January','February','March','April','May','June','July','August','September','October','November','December']; const p=str.split('/'); if(p.length!==3)return str; const mm=parseInt(p[1],10),yy=String(p[2]).slice(-2); if(mm<1||mm>12)return str; return `${MN[mm-1]} ${yy}`; }
+  function calcTimeDiff(a, b) { if (!a||!b) return null; const fr=a<b?a:b,to=a<b?b:a; let y=to.getFullYear()-fr.getFullYear(),m=to.getMonth()-fr.getMonth(),d=to.getDate()-fr.getDate(); if(d<0){m--;d+=new Date(to.getFullYear(),to.getMonth(),0).getDate();} if(m<0){y--;m+=12;} return{years:Math.max(0,y),months:Math.max(0,m),days:Math.max(0,d)}; }
+  function fmtElapsed(r) { if (!r) return DASH; const p=[]; if(r.years>0)p.push(r.years+'y'); if(r.months>0||r.years>0)p.push(r.months+'m'); p.push(r.days+'d'); return p.join(' '); }
+  // Capitalized version: 4m 24d → 4M 24D
+  function fmtElapsedCap(r) { if(!r)return DASH; const p=[]; if(r.years>0)p.push(r.years+'Y'); if(r.months>0||r.years>0)p.push(r.months+'M'); p.push(r.days+'D'); return p.join(' '); }
+  function buildTimePassedHTML(fddStr, expiryStr) {
+    const now=new Date();
+    const expD=parseQipDateFull(expiryStr);
+    const ft=fmtElapsedCap(calcTimeDiff(parseQipDateFull(fddStr),now));
+    const et=fmtElapsedCap(calcTimeDiff(expD,now));
+    // '+' if expiry already passed (overdue → red), '−' if still ahead (future → green)
+    const expired=(expD&&expD<now);
+    const sign=expired?'+':'\u2212';
+    const col2=expired?'#FF453A':'#30D158';
+    return `(<span style="color:#0A84FF;font-weight:800;">${ft}</span>`
+         + `<span style="color:#8E8E93;font-size:16px;font-weight:400;margin:0 5px;"> / </span>`
+         + `<span style="color:${col2};font-weight:800;">${sign}${et}</span>)`;
   }
 
-  // QIP: TENURE MATH
-  function parseQipDate(str) {
-    if (!str || str === DASH) return null;
-    const p = str.split('/'); if (p.length !== 3) return null;
-    const m = parseInt(p[1], 10), y = parseInt(p[2], 10);
-    if (!m || !y || m < 1 || m > 12) return null;
-    return { month: m, year: y };
-  }
-  function calcLoanTenure(fddStr, expiryStr) {
-    const f = parseQipDate(fddStr), e = parseQipDate(expiryStr); if (!f || !e) return DASH;
-    const n = (e.year - f.year) * 12 + (e.month - f.month) + 1;
-    return n > 0 ? n + (n === 1 ? ' Month' : ' Months') : DASH;
-  }
-  function calcLoanBreakdown(fddStr, expiryStr, currentMonthPaid) {
-    const f = parseQipDate(fddStr), e = parseQipDate(expiryStr);
-    if (!f || !e) return null;
-    const total = (e.year - f.year) * 12 + (e.month - f.month) + 1;
-    if (total <= 0) return null;
-    const now = new Date(), cy = now.getFullYear(), cm = now.getMonth() + 1;
-    // paid = months from FDD month up to (and including) last paid month
-    let paid = (cy - f.year) * 12 + (cm - f.month);
-    if (currentMonthPaid) paid += 1;  // checkbox âœ“ = current month is already paid
-    paid = Math.max(0, Math.min(total, paid));
-    const due = total - paid;
-    return { paid, due, total };
-  }
-  function buildLoanBreakdownHTML(fddStr, expiryStr, currentMonthPaid) {
-    const r = calcLoanBreakdown(fddStr, expiryStr, currentMonthPaid); if (!r) return DASH;
-    return `(<span style="color:#30D158;font-weight:800">${r.paid} paid</span><span style="color:#1D1D1F;font-weight:700"> + </span><span style="color:#FF453A;font-weight:800">${r.due} due</span>)`;
-  }
-
-  // QIP: DATA EXTRACTION
+  // QIP DATA EXTRACTION â€” EXACT ORIGINAL
   function extractData() {
-    if (!originalEl) {
-      return {
-        name: DASH, loanNo: DASH, product: DASH, asset: DASH, model: DASH,
-        emiA: DASH, lpcB: DASH, totalC: DASH, waiverAmt: DASH, collectAmt: DASH,
-        lastPaidAmt: DASH, lastPaidDate: DASH,
-        firstDueDate: DASH, loanExpiryDate: DASH
-      };
-    }
-    const customerCard    = cardOf(elByText('Customer Details',     originalEl));
-    const productCard     = cardOf(elByText('Product Details',      originalEl));
-    const amountCard      = cardOf(elByText('Amount payables',      originalEl));
-    const loanCard        = cardOf(elByText('Loan Details',         originalEl));
-    const flagsCard       = cardOf(elByText('Flags',                originalEl));
-    const pastPaymentCard = cardOf(elByText('Past Payment Details', originalEl));
-    return {
-      name:         qipVal(customerCard,    'Name'),
-      loanNo:       qipVal(loanCard,        'Loan Number'),
-      product:      qipVal(productCard,     'Product description'),
-      asset:        qipVal(productCard,     'Asset Description'),
-      model:        qipVal(productCard,     'Make or Model'),
-      emiA:         qipVal(amountCard,      'EMI Overdue'),
-      lpcB:         qipVal(amountCard,      'Late Payment Charges'),
-      totalC:       qipVal(amountCard,      'Total Overdue'),
-      waiverAmt:    qipVal(flagsCard,       'Waiver Amount'),
-      collectAmt:   qipVal(flagsCard,       'Collect Amount'),
-      lastPaidAmt:     qipVal(pastPaymentCard, 'Last Paid Amount'),
-      lastPaidDate:    qipVal(pastPaymentCard, 'Last payment Date'),
-      firstDueDate:    qipVal(loanCard,        'First Due date (FDD)'),
-      loanExpiryDate:  qipVal(loanCard,        'Loan Expiry Date'),
-    };
+    if (!originalEl) { return { name:DASH,loanNo:DASH,product:DASH,asset:DASH,model:DASH,emiA:DASH,lpcB:DASH,totalC:DASH,waiverAmt:DASH,collectAmt:DASH,lastPaidAmt:DASH,lastPaidDate:DASH,firstDueDate:DASH,loanExpiryDate:DASH }; }
+    const customerCard=cardOf(elByText('Customer Details',originalEl)),productCard=cardOf(elByText('Product Details',originalEl)),amountCard=cardOf(elByText('Amount payables',originalEl)),loanCard=cardOf(elByText('Loan Details',originalEl)),flagsCard=cardOf(elByText('Flags',originalEl)),pastPaymentCard=cardOf(elByText('Past Payment Details',originalEl));
+    return { name:qipVal(customerCard,'Name'),loanNo:qipVal(loanCard,'Loan Number'),product:qipVal(productCard,'Product description'),asset:qipVal(productCard,'Asset Description'),model:qipVal(productCard,'Make or Model'),emiA:qipVal(amountCard,'EMI Overdue'),lpcB:qipVal(amountCard,'Late Payment Charges'),totalC:qipVal(amountCard,'Total Overdue'),waiverAmt:qipVal(flagsCard,'Waiver Amount'),collectAmt:qipVal(flagsCard,'Collect Amount'),lastPaidAmt:qipVal(pastPaymentCard,'Last Paid Amount'),lastPaidDate:qipVal(pastPaymentCard,'Last payment Date'),firstDueDate:qipVal(loanCard,'First Due date (FDD)'),loanExpiryDate:qipVal(loanCard,'Loan Expiry Date'),identifier:qipVal(flagsCard,'Identifier') };
   }
+  function hasData(data) { return Object.values(data).some(v => v !== DASH); }
 
-  function hasData(data) {
-    return Object.values(data).some(v => v !== DASH);
-  }
+  function findOriginalEl() { const e=elByText('Customer Details');if(!e)return null;let el=e.parentElement;for(let i=0;i<12;i++){if(!el)break;const t=el.textContent;if(t.includes('Customer Details')&&t.includes('Product Details')&&t.includes('Amount payables')&&t.includes('Loan Details'))return el;el=el.parentElement;}return null; }
+  function findHistoryEl() { const e=elByText('FOLLOW UP HISTORY');if(!e)return null;let c=e.parentElement;for(let i=0;i<8;i++){if(!c)break;if(c.textContent.includes('ESCALATION HISTORY')&&c.textContent.includes('VIEW MORE HISTORY'))return c;c=c.parentElement;}return null; }
+  function hideOriginal() { if(originalEl)Object.assign(originalEl.style,{position:'absolute',top:'-9999px',left:'-9999px',visibility:'hidden',display:'block'}); }
+  function showOriginal() { if(originalEl)Object.assign(originalEl.style,{position:'',top:'',left:'',visibility:'',display:''}); }
+  function applyToggles() { const h=findHistoryEl();if(h)h.style.display=historyVisible?'':'none';const b=document.getElementById('qip-toggle-history');if(b){b.textContent=historyVisible?'Hide History':'Show History';b.classList.toggle('active',historyVisible);} }
 
-  // QIP: DOM HELPERS
-  function findOriginalEl() {
-    const e = elByText('Customer Details'); if (!e) return null;
-    let el = e.parentElement;
-    for (let i = 0; i < 12; i++) {
-      if (!el) break;
-      const t = el.textContent;
-      if (t.includes('Customer Details') && t.includes('Product Details') && t.includes('Amount payables') && t.includes('Loan Details')) return el;
-      el = el.parentElement;
-    }
-    return null;
-  }
-  function findHistoryEl() {
-    const e = elByText('FOLLOW UP HISTORY'); if (!e) return null;
-    let c = e.parentElement;
-    for (let i = 0; i < 8; i++) {
-      if (!c) break;
-      if (c.textContent.includes('ESCALATION HISTORY') && c.textContent.includes('VIEW MORE HISTORY')) return c;
-      c = c.parentElement;
-    }
-    return null;
-  }
-  function hideOriginal() { if (originalEl) Object.assign(originalEl.style, { position:'absolute', top:'-9999px', left:'-9999px', visibility:'hidden', display:'block' }); }
-  function showOriginal() { if (originalEl) Object.assign(originalEl.style, { position:'', top:'', left:'', visibility:'', display:'' }); }
-  function applyToggles() {
-    const h = findHistoryEl(); if (h) h.style.display = historyVisible ? '' : 'none';
-    const b = document.getElementById('qip-toggle-history');
-    if (b) { b.textContent = historyVisible ? 'Hide History' : 'Show History'; b.classList.toggle('active', historyVisible); }
-  }
-
-  // QIP: UI BUILD & UPDATE
+  // QIP BUILD â€” v2.0.0: added Time Passed row after Total Loan Breakdown
   function buildPanel(data) {
-    const div = document.createElement('div');
-    div.id = QID;
-    div.innerHTML = `
-      <div class="qip-hdr">
-        <span class="qip-title">D&amp;C BY Sourav Gorai</span>
-      </div>
+    const div=document.createElement('div'); div.id=QID;
+    div.innerHTML=`
+      <div class="qip-hdr"><span class="qip-title">D&amp;C BY Sourav Gorai</span></div>
+      <div class="qip-identifier-banner" id="qip-identifier-hdr">${data.identifier!==DASH&&data.identifier?data.identifier:DASH}</div>
       <div class="qip-body">
         <div class="qip-card">
           <div class="qip-card-title">Customer &amp; Product Info</div>
           <div id="qip-body-customer">
             <div class="qip-row"><span class="qip-lbl">Name</span><span class="qip-val qip-name" id="qip-name">${data.name}</span></div>
-            <div class="qip-row">
-              <span class="qip-lbl">Loan No.</span>
-              <div class="qip-loan-wrap">
-                <input class="qip-loan-input" id="qip-loan" type="text" readonly value="${data.loanNo}">
-                <button class="qip-copy-btn" id="qip-copy-btn">Copy</button>
-              </div>
-            </div>
+            <div class="qip-row"><span class="qip-lbl">Loan No.</span><div class="qip-loan-wrap"><input class="qip-loan-input" id="qip-loan" type="text" readonly value="${data.loanNo}"><button class="qip-copy-btn" id="qip-copy-btn">Copy</button></div></div>
             <div class="qip-row"><span class="qip-lbl">Product</span><span class="qip-val" id="qip-product">${data.product}</span></div>
             <div class="qip-row"><span class="qip-lbl">Asset</span><span class="qip-val" id="qip-asset">${data.asset}</span></div>
             <div class="qip-row"><span class="qip-lbl">Model</span><span class="qip-val" id="qip-model">${data.model}</span></div>
@@ -729,10 +837,11 @@
         <div class="qip-card">
           <div class="qip-card-title">Loan Tenure Breakdown</div>
           <div id="qip-body-tenure">
-            <div class="qip-row"><span class="qip-lbl">First Due Date (FDD)</span><span class="qip-val" id="qip-fdd">${data.firstDueDate}</span></div>
-            <div class="qip-row"><span class="qip-lbl">Loan Expiry Date</span><span class="qip-val" id="qip-expiry">${data.loanExpiryDate}</span></div>
-            <div class="qip-row"><span class="qip-lbl">Total Loan Count</span><span class="qip-val" id="qip-loan-count">${calcLoanTenure(data.firstDueDate, data.loanExpiryDate)}</span></div>
-            <div class="qip-row"><span class="qip-lbl">Total Loan Breakdown</span><div class="qip-loan-left-row"><input type="checkbox" id="qip-loan-left-chk" class="qip-checkbox" title="Check if current month is already paid"${currentMonthPaid ? ' checked' : ''}><span class="qip-val" id="qip-loan-left">${buildLoanBreakdownHTML(data.firstDueDate, data.loanExpiryDate, currentMonthPaid)}</span></div></div>
+            <div class="qip-row"><span class="qip-lbl">First Due Date (FDD)</span><span class="qip-val" id="qip-fdd">${fmtDateWithMonth(data.firstDueDate)}</span></div>
+            <div class="qip-row"><span class="qip-lbl">Loan Expiry Date</span><span class="qip-val" id="qip-expiry">${fmtDateWithMonth(data.loanExpiryDate)}</span></div>
+            <div class="qip-row"><span class="qip-lbl">Total Loan Count</span><span class="qip-val" id="qip-loan-count">${calcLoanTenure(data.firstDueDate,data.loanExpiryDate)}</span></div>
+            <div class="qip-row"><span class="qip-lbl">Total Loan Breakdown</span><div class="qip-loan-left-row"><input type="checkbox" id="qip-loan-left-chk" class="qip-checkbox" title="Check if current month is already paid"${currentMonthPaid?' checked':''}><span class="qip-val" id="qip-loan-left">${buildLoanBreakdownHTML(data.firstDueDate,data.loanExpiryDate,currentMonthPaid)}</span></div></div>
+            <div class="qip-row" title="Blue: time elapsed since FDD \u00b7 Purple: gap between Expiry date and today"><span class="qip-lbl">Loan Journey</span><div id="qip-time-passed">${buildTimePassedHTML(data.firstDueDate,data.loanExpiryDate)}</div></div>
           </div>
         </div>
         <div class="qip-card">
@@ -755,134 +864,62 @@
   }
 
   function updatePanel(data) {
-    const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
-    [['qip-name',data.name],['qip-product',data.product],['qip-asset',data.asset],['qip-model',data.model],
-     ['qip-emi',data.emiA],['qip-lpc',data.lpcB],['qip-total',data.totalC],['qip-waiver',data.waiverAmt],
-     ['qip-collect',data.collectAmt],['qip-last-paid-amt',data.lastPaidAmt],['qip-last-paid-date',data.lastPaidDate],
-     ['qip-fdd',data.firstDueDate],['qip-expiry',data.loanExpiryDate],
-     ['qip-loan-count',calcLoanTenure(data.firstDueDate,data.loanExpiryDate)]
-    ].forEach(([id,v]) => set(id, v));
-    const ll = document.getElementById('qip-loan-left');
-    if (ll) ll.innerHTML = buildLoanBreakdownHTML(data.firstDueDate, data.loanExpiryDate, currentMonthPaid);
-    const chk = document.getElementById('qip-loan-left-chk'); if (chk) chk.checked = currentMonthPaid;
-    const inp = document.getElementById('qip-loan'); if (inp) inp.value = data.loanNo;
+    const set=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
+    [['qip-name',data.name],['qip-product',data.product],['qip-asset',data.asset],['qip-model',data.model],['qip-emi',data.emiA],['qip-lpc',data.lpcB],['qip-total',data.totalC],['qip-waiver',data.waiverAmt],['qip-collect',data.collectAmt],['qip-last-paid-amt',data.lastPaidAmt],['qip-last-paid-date',data.lastPaidDate],['qip-fdd',fmtDateWithMonth(data.firstDueDate)],['qip-expiry',fmtDateWithMonth(data.loanExpiryDate)],['qip-loan-count',calcLoanTenure(data.firstDueDate,data.loanExpiryDate)],['qip-identifier-hdr',data.identifier!==DASH&&data.identifier?data.identifier:DASH]].forEach(([id,v])=>set(id,v));
+    const ll=document.getElementById('qip-loan-left'); if(ll)ll.innerHTML=buildLoanBreakdownHTML(data.firstDueDate,data.loanExpiryDate,currentMonthPaid);
+    const chk=document.getElementById('qip-loan-left-chk'); if(chk)chk.checked=currentMonthPaid;
+    const inp=document.getElementById('qip-loan'); if(inp)inp.value=data.loanNo;
+    const tp=document.getElementById('qip-time-passed'); if(tp)tp.innerHTML=buildTimePassedHTML(data.firstDueDate,data.loanExpiryDate);
   }
 
-  // QIP: EVENT WIRING
-  function wireCopyBtn() {
-    const btn = document.getElementById('qip-copy-btn'); if (!btn) return;
-    btn.addEventListener('click', () => {
-      const inp = document.getElementById('qip-loan'); if (!inp || inp.value === DASH) return;
-      navigator.clipboard.writeText(inp.value).then(() => {
-        btn.textContent = 'Copied!'; btn.classList.add('copied');
-        setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1600);
-      }).catch(() => { inp.select(); document.execCommand('copy'); });
-    });
-  }
-  function wireLoanLeftChk() {
-    const chk = document.getElementById('qip-loan-left-chk'); if (!chk) return;
-    chk.addEventListener('change', () => {
-      currentMonthPaid = chk.checked; lsSet('loan-left-chk', currentMonthPaid);
-      const d = extractData(), ll = document.getElementById('qip-loan-left');
-      if (ll) ll.innerHTML = buildLoanBreakdownHTML(d.firstDueDate, d.loanExpiryDate, currentMonthPaid);
-    });
-  }
+  function wireCopyBtn() { const btn=document.getElementById('qip-copy-btn');if(!btn)return;btn.addEventListener('click',()=>{const inp=document.getElementById('qip-loan');if(!inp||inp.value===DASH)return;navigator.clipboard.writeText(inp.value).then(()=>{btn.textContent='Copied!';btn.classList.add('copied');setTimeout(()=>{btn.textContent='Copy';btn.classList.remove('copied');},1600);}).catch(()=>{inp.select();document.execCommand('copy');});}); }
+  function wireLoanLeftChk() { const chk=document.getElementById('qip-loan-left-chk');if(!chk)return;chk.addEventListener('change',()=>{currentMonthPaid=chk.checked;lsSet('loan-left-chk',currentMonthPaid);const d=extractData(),ll=document.getElementById('qip-loan-left');if(ll)ll.innerHTML=buildLoanBreakdownHTML(d.firstDueDate,d.loanExpiryDate,currentMonthPaid);}); }
   function wireButtons() {
     wireCopyBtn(); wireLoanLeftChk();
-    document.getElementById('qip-toggle-history').addEventListener('click', () => { historyVisible = !historyVisible; lsSet('history', historyVisible); applyToggles(); });
-    document.getElementById('qip-btn-full').addEventListener('click', () => { qipPanel.style.display = 'none'; showOriginal(); qipBackBar.style.display = 'block'; originalEl.scrollIntoView({ behavior:'smooth', block:'start' }); });
-    document.getElementById('qip-back-btn').addEventListener('click', () => { qipPanel.style.display = ''; hideOriginal(); qipBackBar.style.display = 'none'; qipPanel.scrollIntoView({ behavior:'smooth', block:'start' }); });
+    document.getElementById('qip-toggle-history').addEventListener('click',()=>{historyVisible=!historyVisible;lsSet('history',historyVisible);applyToggles();});
+    document.getElementById('qip-btn-full').addEventListener('click',()=>{qipPanel.style.display='none';showOriginal();qipBackBar.style.display='block';lsSet('view-mode','full');originalEl.scrollIntoView({behavior:'smooth',block:'start'});});
+    document.getElementById('qip-back-btn').addEventListener('click',()=>{qipPanel.style.display='';hideOriginal();qipBackBar.style.display='none';lsSet('view-mode','qip');qipPanel.scrollIntoView({behavior:'smooth',block:'start'});});
   }
 
-  // QIP: INIT
   function qipInit() {
-    if (!elByText('Customer Details') || !elByText('Loan Details')) return;
-    const found = findOriginalEl(); if (!found) return;
-    originalEl = found;
-    const data = extractData();
-    if (document.getElementById(QID)) { if (hasData(data)) updatePanel(data); applyToggles(); return; }
-    if (!document.getElementById(QID + '-css')) {
-      const s = document.createElement('style'); s.id = QID + '-css'; s.textContent = QIP_CSS;
-      document.head.appendChild(s);
+    if(!elByText('Customer Details')||!elByText('Loan Details'))return;
+    const found=findOriginalEl();if(!found)return;
+    originalEl=found;
+    const data=extractData();
+    if(document.getElementById(QID)){if(hasData(data))updatePanel(data);applyToggles();return;}
+    if(!document.getElementById(QID+'-css')){const s=document.createElement('style');s.id=QID+'-css';s.textContent=QIP_CSS;document.head.appendChild(s);}
+    qipPanel=buildPanel(data);
+    originalEl.parentNode.insertBefore(qipPanel,originalEl);
+    qipBackBar=document.createElement('div'); qipBackBar.id='qip-back-bar';
+    qipBackBar.innerHTML='<button id="qip-back-btn">Back to Quick Info</button>';
+    originalEl.parentNode.insertBefore(qipBackBar,originalEl);
+    wireButtons();
+    // Restore persisted view mode (Full Details vs Quick Info panel)
+    if(lsGet('view-mode')==='full'){
+      qipPanel.style.display='none'; showOriginal(); qipBackBar.style.display='block';
+    } else {
+      hideOriginal(); qipBackBar.style.display='none';
     }
-    qipPanel = buildPanel(data);
-    originalEl.parentNode.insertBefore(qipPanel, originalEl);
-    qipBackBar = document.createElement('div');
-    qipBackBar.id = 'qip-back-bar';
-    qipBackBar.innerHTML = '<button id="qip-back-btn">Back to Quick Info</button>';
-    originalEl.parentNode.insertBefore(qipBackBar, originalEl);
-    hideOriginal(); applyToggles(); wireButtons();
+    applyToggles();
   }
 
   // EVENTS & OBSERVERS
+  document.addEventListener("focusin",e=>{const w=getWrapper();if(!w||w.contains(e.target))return;clearTimeout(focusDebounce);hideWrapper();},{capture:true,passive:true});
+  document.addEventListener("focusout",()=>{clearTimeout(focusDebounce);focusDebounce=setTimeout(()=>{if(fieldHidden)showWrapper();},150);},{capture:true,passive:true});
+  if(window.visualViewport){window.visualViewport.addEventListener("resize",()=>{const w=getWrapper();if(!w)return;const ratio=window.visualViewport.height/(window.screen.height||window.innerHeight);if(ratio<0.75){clearTimeout(focusDebounce);hideWrapper();}else if(fieldHidden){clearTimeout(focusDebounce);showWrapper();}},{passive:true});}
+  window.addEventListener("resize",scheduleManage,{passive:true});
 
-  // focus/blur - hide panel when CRM field focused
-  document.addEventListener("focusin", e => {
-    const w = getWrapper(); if (!w || w.contains(e.target)) return;
-    clearTimeout(focusDebounce); hideWrapper();
-  }, { capture: true, passive: true });
-  document.addEventListener("focusout", () => {
-    clearTimeout(focusDebounce);
-    focusDebounce = setTimeout(() => { if (fieldHidden) showWrapper(); }, 150);
-  }, { capture: true, passive: true });
-  if (window.visualViewport) {
-    window.visualViewport.addEventListener("resize", () => {
-      const w = getWrapper(); if (!w) return;
-      const ratio = window.visualViewport.height / (window.screen.height || window.innerHeight);
-      if (ratio < 0.75) { clearTimeout(focusDebounce); hideWrapper(); }
-      else if (fieldHidden) { clearTimeout(focusDebounce); showWrapper(); }
-    }, { passive: true });
-  }
-  window.addEventListener("resize", scheduleManage, { passive: true });
-
-  // MUTATION OBSERVER (debounced, handles both button panel + QIP)
-  let everSawPage  = false;
-  let qipObsTimer  = null;
-  const obs = new MutationObserver(() => {
-    // CRM Helper side: schedule button panel refresh
-    clearTimeout(mutTimer);
-    mutTimer = setTimeout(() => {
-      scheduleManage();
-      if (isTargetPage()) everSawPage = true;
-    }, 300);
-
-    // QIP side: update or rebuild the info panel
-    clearTimeout(qipObsTimer);
-    qipObsTimer = setTimeout(() => {
-      if (!document.getElementById(QID)) {
-        originalEl = null; qipPanel = null; qipBackBar = null;
-        qipInit();
-      } else {
-        const data = extractData();
-        if (hasData(data)) updatePanel(data);
-        applyToggles();
-      }
-    }, 600);
+  let everSawPage=false,qipObsTimer=null;
+  const obs=new MutationObserver(()=>{
+    clearTimeout(mutTimer); mutTimer=setTimeout(()=>{scheduleManage();if(isTargetPage())everSawPage=true;},300);
+    clearTimeout(qipObsTimer); qipObsTimer=setTimeout(()=>{if(!document.getElementById(QID)){originalEl=null;qipPanel=null;qipBackBar=null;qipInit();}else{const data=extractData();if(hasData(data))updatePanel(data);applyToggles();}},600);
   });
-  // Observe documentElement (superset of body Ã¢â‚¬â€ covers both scripts' original targets)
-  obs.observe(document.documentElement, { childList: true, subtree: true });
+  obs.observe(document.documentElement,{childList:true,subtree:true});
+  setTimeout(()=>{if(!everSawPage){obs.disconnect();clearTimeout(mutTimer);clearTimeout(btnCheckTimer);clearTimeout(qipObsTimer);}},60000);
 
-  // Auto-disconnect after 60 s if the CRM page was never detected
-  setTimeout(() => {
-    if (!everSawPage) {
-      obs.disconnect();
-      clearTimeout(mutTimer);
-      clearTimeout(btnCheckTimer);
-      clearTimeout(qipObsTimer);
-    }
-  }, 60000);
-
-  // UNIFIED INIT
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", () => {
-      manageButtons();
-      qipInit();
-    });
-  } else {
-    manageButtons();
-    qipInit();
-  }
-  setTimeout(() => { manageButtons(); qipInit(); }, 1000);
+  if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",()=>{manageButtons();qipInit();});}
+  else{manageButtons();qipInit();}
+  setTimeout(()=>{manageButtons();qipInit();},1000);
 
   } // end _initScript
 })();
